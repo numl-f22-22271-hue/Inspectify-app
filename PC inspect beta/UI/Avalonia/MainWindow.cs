@@ -367,10 +367,49 @@ namespace PC_inspect_beta.UI.Avalonia
                 AppendSection(sb, "NETWORK");
                 foreach (var n in nets)
                     sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
+                sb.AppendLine();
+
+                // ── Stress tests (cross-platform) ────────────────────────
+                await UpdateAsync("RAM stress test…", sb);
+                var ramStress = await Task.Run(StressTestEngine.RunRamStress);
+                AppendSection(sb, "STRESS TEST — RAM");
+                sb.AppendLine($"  {ramStress.Summary}");
+                sb.AppendLine($"  Result      : {(ramStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                if (ramStress.Metrics.TryGetValue("write_speed_mbs", out var wsm))
+                    result.Metadata["ram_write_speed_mbs"] = wsm;
+                result.Metadata["stress_ram"] = ramStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
+
+                await UpdateAsync("CPU stress test…", sb);
+                var cpuStress = await Task.Run(StressTestEngine.RunCpuStress);
+                AppendSection(sb, "STRESS TEST — CPU");
+                sb.AppendLine($"  {cpuStress.Summary}");
+                sb.AppendLine($"  Result      : {(cpuStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                result.Metadata["stress_cpu"] = cpuStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
+
+                await UpdateAsync("GPU/compute stress test…", sb);
+                var gpuStress = await Task.Run(StressTestEngine.RunGpuStress);
+                AppendSection(sb, "STRESS TEST — GPU/COMPUTE");
+                sb.AppendLine($"  {gpuStress.Summary}");
+                sb.AppendLine($"  Result      : {(gpuStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                result.Metadata["stress_gpu"] = gpuStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
+
+                await UpdateAsync("Storage R/W speed test…", sb);
+                var storageStress = await Task.Run(StressTestEngine.RunStorageStress);
+                AppendSection(sb, "STRESS TEST — STORAGE");
+                foreach (var s in storageStress)
+                {
+                    sb.AppendLine($"  {s.Name}");
+                    sb.AppendLine($"    {s.Summary}");
+                    sb.AppendLine($"    Result    : {(s.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                }
+                result.Metadata["stress_storage"] = storageStress.All(s => s.Passed) ? "Passed" : "Failed";
 
                 result.ReportText = sb.ToString();
                 _lastScan = result;
-                _status.Text = "Scan complete ✓";
+                _status.Text = "Scan + stress tests complete ✓";
             }
             catch (Exception ex)
             {
