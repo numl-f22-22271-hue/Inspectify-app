@@ -4,11 +4,20 @@
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
 		<RootNamespace>PC_inspect_beta</RootNamespace>
+		<AssemblyName>InspectifyScanner</AssemblyName>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<ApplicationIcon>PC-a-icon.ico</ApplicationIcon>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
 		<NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
+
+		<!-- Single-file publish settings -->
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<DebugType>embedded</DebugType>
 	</PropertyGroup>
 
 	<!-- Windows-only target: WinForms UI + ML.NET (x64) -->

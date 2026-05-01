@@ -23,7 +23,20 @@ Scans your laptop's complete hardware and automatically creates a verified listi
 
 ---
 
-## How to Build & Run
+## Easiest: Download Pre-Built Binary
+
+Go to **[Releases](https://github.com/numl-f22-22271-hue/Inspectify-app/releases/latest)** and download:
+
+- **Windows:** `InspectifyScanner-Windows.exe` — single file, double-click to run
+- **macOS Apple Silicon:** `InspectifyScanner-macOS.dmg` — open, drag to Applications
+- **macOS Intel:** `InspectifyScanner-macOS-Intel.zip`
+- **Linux:** `InspectifyScanner-Linux.tar.gz` — extract and run
+
+No .NET installation required — runtime is bundled.
+
+---
+
+## Build From Source
 
 ### Prerequisites
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
@@ -54,28 +67,50 @@ Same Avalonia version as macOS.
 
 ---
 
-## Build for Distribution
+## Build a Single-File Distribution Binary
 
-### Windows installer (single .exe)
+Each command below produces **one self-contained executable** with the .NET runtime bundled — users don't need to install anything.
+
+### Windows (single .exe — ~80 MB)
 ```powershell
-dotnet publish -c Release -r win-x64 -f net8.0-windows --self-contained -o publish/win
+dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r win-x64 -f net8.0-windows --self-contained -o publish/win
 ```
-Output: `publish/win/PC inspect beta.exe`
+Output: `publish/win/InspectifyScanner.exe` ← single file, just send this to users
 
 ### macOS Apple Silicon (M1/M2/M3/M4)
 ```bash
-dotnet publish -c Release -r osx-arm64 -f net8.0 --self-contained -o publish/mac-arm64
+dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r osx-arm64 -f net8.0 --self-contained -o publish/mac-arm64
 ```
+Output: `publish/mac-arm64/InspectifyScanner` ← single binary
 
 ### macOS Intel
 ```bash
-dotnet publish -c Release -r osx-x64 -f net8.0 --self-contained -o publish/mac-x64
+dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r osx-x64 -f net8.0 --self-contained -o publish/mac-x64
 ```
 
 ### Linux x64
 ```bash
-dotnet publish -c Release -r linux-x64 -f net8.0 --self-contained -o publish/linux
+dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r linux-x64 -f net8.0 --self-contained -o publish/linux
 ```
+
+---
+
+## Automated Builds (GitHub Actions)
+
+Push a version tag and GitHub will auto-build and publish a release for all platforms:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The `.github/workflows/build.yml` workflow will:
+1. Build single-file Windows .exe on a Windows runner
+2. Build .dmg for Apple Silicon + .zip for Intel Mac on a macOS runner
+3. Build a Linux tar.gz on an Ubuntu runner
+4. Create a GitHub Release with all four downloads attached
+
+Users then go to your [Releases page](https://github.com/numl-f22-22271-hue/Inspectify-app/releases/latest) and download just the file they need — no zip extraction.
 
 ---
 
