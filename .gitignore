@@ -1,0 +1,40 @@
+# Build output
+bin/
+obj/
+publish/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+
+# Visual Studio
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Claude
+.claude/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Environment / secrets
+*.env
+appsettings.Local.json
+
+# NuGet
+*.nupkg
+packages/
+
+# Test coverage
+coverage/
+TestResults/
