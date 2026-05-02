@@ -34,13 +34,15 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
-          -p:PublishReadyToRun=true
           -o publish/win
 
       - name: Rename artifact
         shell: pwsh
-        run: Rename-Item "publish/win/InspectifyScanner.exe" "InspectifyScanner-Windows-x64.exe"
+        run: |
+          Get-ChildItem publish/win -Filter *.exe
+          Rename-Item "publish/win/InspectifyScanner.exe" "InspectifyScanner-Windows-x64.exe"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,45 +71,24 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
-          -p:PublishReadyToRun=true
           -o publish/mac-arm64
 
-      - name: Create .app bundle + .dmg (Apple Silicon)
+      - name: Write Info.plist
         run: |
           APP="InspectifyScanner.app"
-          CONTENTS="$APP/Contents"
-          mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
-          cp -r publish/mac-arm64/* "$CONTENTS/MacOS/"
-          chmod +x "$CONTENTS/MacOS/InspectifyScanner"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp publish/mac-arm64/InspectifyScanner "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/InspectifyScanner"
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleExecutable</key><string>InspectifyScanner</string>' '  <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>' '  <key>CFBundleName</key><string>Inspectify Scanner</string>' '  <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>' '  <key>CFBundleShortVersionString</key><string>2.0.0</string>' '  <key>CFBundleVersion</key><string>2</string>' '  <key>CFBundlePackageType</key><string>APPL</string>' '  <key>LSMinimumSystemVersion</key><string>11.0</string>' '  <key>NSHighResolutionCapable</key><true/>' '</dict>' '</plist>' > "$APP/Contents/Info.plist"
 
-          cat > "$CONTENTS/Info.plist" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key><string>InspectifyScanner</string>
-              <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>
-              <key>CFBundleName</key><string>Inspectify Scanner</string>
-              <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>
-              <key>CFBundleShortVersionString</key><string>2.0.0</string>
-              <key>CFBundleVersion</key><string>2</string>
-              <key>CFBundlePackageType</key><string>APPL</string>
-              <key>LSMinimumSystemVersion</key><string>11.0</string>
-              <key>NSHighResolutionCapable</key><true/>
-              <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
-          </dict>
-          </plist>
-          PLIST
-
-          mkdir dmg-arm64
-          cp -r "$APP" dmg-arm64/
-          ln -s /Applications dmg-arm64/Applications
-          hdiutil create \
-            -volname "Inspectify Scanner" \
-            -srcfolder dmg-arm64 \
-            -ov -format UDZO \
-            InspectifyScanner-macOS-AppleSilicon.dmg
+      - name: Create DMG (Apple Silicon)
+        run: |
+          mkdir dmg-staging
+          cp -r InspectifyScanner.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "Inspectify Scanner" -srcfolder dmg-staging -ov -format UDZO InspectifyScanner-macOS-AppleSilicon.dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -136,45 +117,24 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
-          -p:PublishReadyToRun=true
           -o publish/mac-x64
 
-      - name: Create .app bundle + .dmg (Intel)
+      - name: Write Info.plist
         run: |
           APP="InspectifyScanner.app"
-          CONTENTS="$APP/Contents"
-          mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
-          cp -r publish/mac-x64/* "$CONTENTS/MacOS/"
-          chmod +x "$CONTENTS/MacOS/InspectifyScanner"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp publish/mac-x64/InspectifyScanner "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/InspectifyScanner"
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleExecutable</key><string>InspectifyScanner</string>' '  <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>' '  <key>CFBundleName</key><string>Inspectify Scanner</string>' '  <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>' '  <key>CFBundleShortVersionString</key><string>2.0.0</string>' '  <key>CFBundleVersion</key><string>2</string>' '  <key>CFBundlePackageType</key><string>APPL</string>' '  <key>LSMinimumSystemVersion</key><string>10.15</string>' '  <key>NSHighResolutionCapable</key><true/>' '</dict>' '</plist>' > "$APP/Contents/Info.plist"
 
-          cat > "$CONTENTS/Info.plist" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key><string>InspectifyScanner</string>
-              <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>
-              <key>CFBundleName</key><string>Inspectify Scanner</string>
-              <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>
-              <key>CFBundleShortVersionString</key><string>2.0.0</string>
-              <key>CFBundleVersion</key><string>2</string>
-              <key>CFBundlePackageType</key><string>APPL</string>
-              <key>LSMinimumSystemVersion</key><string>10.15</string>
-              <key>NSHighResolutionCapable</key><true/>
-              <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
-          </dict>
-          </plist>
-          PLIST
-
-          mkdir dmg-x64
-          cp -r "$APP" dmg-x64/
-          ln -s /Applications dmg-x64/Applications
-          hdiutil create \
-            -volname "Inspectify Scanner" \
-            -srcfolder dmg-x64 \
-            -ov -format UDZO \
-            InspectifyScanner-macOS-Intel.dmg
+      - name: Create DMG (Intel)
+        run: |
+          mkdir dmg-staging
+          cp -r InspectifyScanner.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "Inspectify Scanner" -srcfolder dmg-staging -ov -format UDZO InspectifyScanner-macOS-Intel.dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -211,11 +171,11 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
-          -p:PublishReadyToRun=true
           -o publish/linux
 
-      - name: Make executable + package
+      - name: Make executable
         run: |
           chmod +x publish/linux/InspectifyScanner
           cp publish/linux/InspectifyScanner InspectifyScanner-Linux-x64
@@ -236,13 +196,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
-        with: { name: windows-build,    path: artifacts/win }
+        with: { name: windows-build, path: artifacts/win }
       - uses: actions/download-artifact@v4
         with: { name: macos-arm64-build, path: artifacts/mac-arm64 }
       - uses: actions/download-artifact@v4
-        with: { name: macos-x64-build,  path: artifacts/mac-x64 }
+        with: { name: macos-x64-build, path: artifacts/mac-x64 }
       - uses: actions/download-artifact@v4
-        with: { name: linux-build,      path: artifacts/linux }
+        with: { name: linux-build, path: artifacts/linux }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -260,13 +220,13 @@ jobs:
 
             Hardware inspection + marketplace tool for [Inspectify LapStore](https://inspectifylapstore.me).
 
-            ### Downloads — no installation required, just download and run
+            ### Downloads — just download and run, no installation required
 
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | **Windows 10/11** | `InspectifyScanner-Windows-x64.exe` | Double-click to run |
-            | **macOS Apple Silicon** (M1/M2/M3/M4) | `InspectifyScanner-macOS-AppleSilicon.dmg` | Open DMG → drag to Applications |
-            | **macOS Intel** | `InspectifyScanner-macOS-Intel.dmg` | Open DMG → drag to Applications |
+            | Platform | File | How to run |
+            |----------|------|------------|
+            | **Windows 10/11** | `InspectifyScanner-Windows-x64.exe` | Double-click |
+            | **macOS Apple Silicon** (M1–M4) | `InspectifyScanner-macOS-AppleSilicon.dmg` | Open DMG, drag to Applications |
+            | **macOS Intel** | `InspectifyScanner-macOS-Intel.dmg` | Open DMG, drag to Applications |
             | **Linux x64** | `InspectifyScanner-Linux-x64` | `chmod +x` then run |
 
-            > **No .NET SDK or runtime required** — the runtime is bundled inside every binary.
+            > No .NET SDK or runtime required — everything is bundled inside each binary.

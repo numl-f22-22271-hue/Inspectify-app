@@ -23,10 +23,9 @@
 		<DebugType>embedded</DebugType>
 	</PropertyGroup>
 
-	<!-- Windows-specific defines and manifest -->
+	<!-- Windows-specific defines (WMI + ML.NET available) -->
 	<PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) OR $(RuntimeIdentifier.StartsWith('win'))">
 		<DefineConstants>$(DefineConstants);WINDOWS;HAS_ML</DefineConstants>
-		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
 	<!-- Shared cross-platform packages -->
@@ -55,11 +54,12 @@
 		<PackageReference Include="System.Management" Version="10.0.1" />
 	</ItemGroup>
 
-	<!-- Always exclude WinForms files — Avalonia is the UI layer on all platforms -->
+	<!-- Exclude WinForms UI and the old WinForms-based DiagnosticsEngine -->
 	<ItemGroup>
 		<Compile Remove="UI\Forms\**\*.cs" />
 		<Compile Remove="UI\Theme.cs" />
 		<Compile Remove="UI\UIHelper.cs" />
+		<Compile Remove="Core\DiagnosticsEngine.cs" />
 		<None Remove="UI\Forms\**\*.resx" />
 		<EmbeddedResource Remove="UI\Forms\**\*.resx" />
 	</ItemGroup>
