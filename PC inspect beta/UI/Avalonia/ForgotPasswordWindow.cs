@@ -1,4 +1,3 @@
-#if !WINDOWS
 using System;
 using System.Threading.Tasks;
 using Avalonia;
@@ -157,4 +156,3 @@ namespace PC_inspect_beta.UI.Avalonia
         };
     }
 }
-#endif

@@ -1,4 +1,3 @@
-#if !WINDOWS
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
@@ -210,4 +209,3 @@ namespace PC_inspect_beta.UI.Avalonia
         }
     }
 }
-#endif

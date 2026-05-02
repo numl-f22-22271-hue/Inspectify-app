@@ -109,9 +109,9 @@ namespace PC_inspect_beta.Core
 
         private static void Train()
         {
-            string csv = ResolveDatasetPath();
-            if (csv == null || !File.Exists(csv))
-                throw new FileNotFoundException("Training dataset not found.");
+            string csv = ResolveDatasetPath()
+                      ?? ExtractEmbeddedCsv()
+                      ?? throw new FileNotFoundException("Training dataset not found.");
 
             _ml = new MLContext(seed: 42);
 
@@ -147,6 +147,7 @@ namespace PC_inspect_beta.Core
 
         private static string ResolveDatasetPath()
         {
+            // Used during development when the CSV sits next to the build output
             string[] candidates =
             {
                 Path.Combine(AppContext.BaseDirectory, "Data", "laptop_dataset.csv"),
@@ -156,6 +157,25 @@ namespace PC_inspect_beta.Core
             foreach (var p in candidates)
                 if (File.Exists(p)) return p;
             return null;
+        }
+
+        private static string _tempCsvPath;
+
+        // Extracts the embedded CSV to a temp file so ML.NET's file-based loader can read it.
+        // Called only in single-file publish mode where the CSV has no physical side-car path.
+        private static string ExtractEmbeddedCsv()
+        {
+            if (_tempCsvPath != null && File.Exists(_tempCsvPath))
+                return _tempCsvPath;
+
+            using var stream = typeof(PricePredictor).Assembly
+                .GetManifestResourceStream("PC_inspect_beta.Data.laptop_dataset.csv");
+            if (stream == null) return null;
+
+            _tempCsvPath = Path.Combine(Path.GetTempPath(), "inspectify_laptop_dataset.csv");
+            using var fs = new FileStream(_tempCsvPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            stream.CopyTo(fs);
+            return _tempCsvPath;
         }
 
         // ══════════════════════════════════════════════════════════════════════

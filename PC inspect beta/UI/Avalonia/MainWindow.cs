@@ -1,4 +1,3 @@
-#if !WINDOWS
 using System;
 using System.Linq;
 using System.Text;
@@ -180,7 +179,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 Text =
                     "Welcome to Inspectify Scanner.\n\n" +
                     "1. Sign in (top right) with your Inspectify LapStore account\n" +
-                    "2. Click 'Run Hardware Scan' to inspect this Mac\n" +
+                    "2. Click 'Run Hardware Scan' to inspect this machine\n" +
                     "3. Click 'Post Ad' to publish a marketplace listing\n\n" +
                     "Optional:\n" +
                     "  • 'Export PDF' — save the scan as a PDF report\n" +
@@ -457,4 +456,3 @@ namespace PC_inspect_beta.UI.Avalonia
         }
     }
 }
-#endif

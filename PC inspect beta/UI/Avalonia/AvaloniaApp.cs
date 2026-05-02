@@ -1,4 +1,3 @@
-#if !WINDOWS
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -37,4 +36,3 @@ namespace PC_inspect_beta.UI.Avalonia
                 .LogToTrace();
     }
 }
-#endif

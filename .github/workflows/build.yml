@@ -6,9 +6,14 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
 
+env:
+  PROJ: "PC inspect beta/PC inspect beta.csproj"
+  CONFIG: Release
+  FRAMEWORK: net8.0
+
 jobs:
   # ──────────────────────────────────────────────
-  #  WINDOWS — single .exe
+  #  WINDOWS — single .exe, no .NET install needed
   # ──────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
@@ -20,24 +25,32 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish (single-file Windows EXE)
-        run: dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r win-x64 -f net8.0-windows --self-contained -o publish/win
+      - name: Publish single-file Windows EXE
+        run: >
+          dotnet publish "${{ env.PROJ }}"
+          -c ${{ env.CONFIG }}
+          -f ${{ env.FRAMEWORK }}
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishReadyToRun=true
+          -o publish/win
 
-      - name: Rename for clarity
+      - name: Rename artifact
         shell: pwsh
-        run: |
-          Rename-Item "publish/win/InspectifyScanner.exe" "InspectifyScanner-Windows.exe"
+        run: Rename-Item "publish/win/InspectifyScanner.exe" "InspectifyScanner-Windows-x64.exe"
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: publish/win/InspectifyScanner-Windows.exe
+          path: publish/win/InspectifyScanner-Windows-x64.exe
 
   # ──────────────────────────────────────────────
-  #  macOS — single .app bundle in .dmg
+  #  macOS — Apple Silicon (M-series)
   # ──────────────────────────────────────────────
-  build-macos:
+  build-macos-arm64:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,65 +60,129 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish (Apple Silicon)
-        run: dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r osx-arm64 -f net8.0 --self-contained -o publish/mac-arm64
+      - name: Publish single-file (Apple Silicon)
+        run: >
+          dotnet publish "${{ env.PROJ }}"
+          -c ${{ env.CONFIG }}
+          -f ${{ env.FRAMEWORK }}
+          -r osx-arm64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishReadyToRun=true
+          -o publish/mac-arm64
 
-      - name: Publish (Intel Mac)
-        run: dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r osx-x64 -f net8.0 --self-contained -o publish/mac-x64
-
-      - name: Create .app bundle (Apple Silicon) + .dmg
+      - name: Create .app bundle + .dmg (Apple Silicon)
         run: |
-          APPDIR="InspectifyScanner.app/Contents"
-          mkdir -p "$APPDIR/MacOS"
-          mkdir -p "$APPDIR/Resources"
-          cp -r publish/mac-arm64/* "$APPDIR/MacOS/"
-          chmod +x "$APPDIR/MacOS/InspectifyScanner"
+          APP="InspectifyScanner.app"
+          CONTENTS="$APP/Contents"
+          mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+          cp -r publish/mac-arm64/* "$CONTENTS/MacOS/"
+          chmod +x "$CONTENTS/MacOS/InspectifyScanner"
 
-          cat > "$APPDIR/Info.plist" <<EOF
+          cat > "$CONTENTS/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-              <key>CFBundleExecutable</key>
-              <string>InspectifyScanner</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.inspectifylapstore.scanner</string>
-              <key>CFBundleName</key>
-              <string>Inspectify Scanner</string>
-              <key>CFBundleDisplayName</key>
-              <string>Inspectify Scanner</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0</string>
-              <key>CFBundleVersion</key>
-              <string>1</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>11.0</string>
-              <key>NSHighResolutionCapable</key>
-              <true/>
+              <key>CFBundleExecutable</key><string>InspectifyScanner</string>
+              <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>
+              <key>CFBundleName</key><string>Inspectify Scanner</string>
+              <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>
+              <key>CFBundleShortVersionString</key><string>2.0.0</string>
+              <key>CFBundleVersion</key><string>2</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>LSMinimumSystemVersion</key><string>11.0</string>
+              <key>NSHighResolutionCapable</key><true/>
+              <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
           </dict>
           </plist>
-          EOF
+          PLIST
 
-          mkdir dmg-staging
-          cp -r InspectifyScanner.app dmg-staging/
-          ln -s /Applications dmg-staging/Applications
-          hdiutil create -volname "Inspectify Scanner" -srcfolder dmg-staging -ov -format UDZO InspectifyScanner-macOS.dmg
+          mkdir dmg-arm64
+          cp -r "$APP" dmg-arm64/
+          ln -s /Applications dmg-arm64/Applications
+          hdiutil create \
+            -volname "Inspectify Scanner" \
+            -srcfolder dmg-arm64 \
+            -ov -format UDZO \
+            InspectifyScanner-macOS-AppleSilicon.dmg
 
-      - name: Zip Intel Mac build
-        run: cd publish/mac-x64 && zip -r ../../InspectifyScanner-macOS-Intel.zip .
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: |
-            InspectifyScanner-macOS.dmg
-            InspectifyScanner-macOS-Intel.zip
+          name: macos-arm64-build
+          path: InspectifyScanner-macOS-AppleSilicon.dmg
 
   # ──────────────────────────────────────────────
-  #  LINUX — single binary
+  #  macOS — Intel
+  # ──────────────────────────────────────────────
+  build-macos-x64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish single-file (Intel Mac)
+        run: >
+          dotnet publish "${{ env.PROJ }}"
+          -c ${{ env.CONFIG }}
+          -f ${{ env.FRAMEWORK }}
+          -r osx-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishReadyToRun=true
+          -o publish/mac-x64
+
+      - name: Create .app bundle + .dmg (Intel)
+        run: |
+          APP="InspectifyScanner.app"
+          CONTENTS="$APP/Contents"
+          mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+          cp -r publish/mac-x64/* "$CONTENTS/MacOS/"
+          chmod +x "$CONTENTS/MacOS/InspectifyScanner"
+
+          cat > "$CONTENTS/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key><string>InspectifyScanner</string>
+              <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>
+              <key>CFBundleName</key><string>Inspectify Scanner</string>
+              <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>
+              <key>CFBundleShortVersionString</key><string>2.0.0</string>
+              <key>CFBundleVersion</key><string>2</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>LSMinimumSystemVersion</key><string>10.15</string>
+              <key>NSHighResolutionCapable</key><true/>
+              <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          mkdir dmg-x64
+          cp -r "$APP" dmg-x64/
+          ln -s /Applications dmg-x64/Applications
+          hdiutil create \
+            -volname "Inspectify Scanner" \
+            -srcfolder dmg-x64 \
+            -ov -format UDZO \
+            InspectifyScanner-macOS-Intel.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-build
+          path: InspectifyScanner-macOS-Intel.dmg
+
+  # ──────────────────────────────────────────────
+  #  LINUX — single binary, no install needed
   # ──────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
@@ -117,66 +194,79 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish (single binary, Linux x64)
-        run: dotnet publish "PC inspect beta/PC inspect beta.csproj" -c Release -r linux-x64 -f net8.0 --self-contained -o publish/linux
+      - name: Install Avalonia Linux dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libfontconfig1-dev \
+            libicu-dev
 
-      - name: Make executable + tar.gz
+      - name: Publish single-file Linux binary
+        run: >
+          dotnet publish "${{ env.PROJ }}"
+          -c ${{ env.CONFIG }}
+          -f ${{ env.FRAMEWORK }}
+          -r linux-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishReadyToRun=true
+          -o publish/linux
+
+      - name: Make executable + package
         run: |
           chmod +x publish/linux/InspectifyScanner
-          cd publish/linux && tar -czf ../../InspectifyScanner-Linux.tar.gz InspectifyScanner
+          cp publish/linux/InspectifyScanner InspectifyScanner-Linux-x64
 
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: InspectifyScanner-Linux.tar.gz
+          path: InspectifyScanner-Linux-x64
 
   # ──────────────────────────────────────────────
-  #  RELEASE — combine all artifacts
+  #  RELEASE — attach all binaries to the tag
   # ──────────────────────────────────────────────
   release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos-arm64, build-macos-x64, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          name: windows-build
-          path: artifacts/win
-
+        with: { name: windows-build,    path: artifacts/win }
       - uses: actions/download-artifact@v4
-        with:
-          name: macos-build
-          path: artifacts/mac
-
+        with: { name: macos-arm64-build, path: artifacts/mac-arm64 }
       - uses: actions/download-artifact@v4
-        with:
-          name: linux-build
-          path: artifacts/linux
+        with: { name: macos-x64-build,  path: artifacts/mac-x64 }
+      - uses: actions/download-artifact@v4
+        with: { name: linux-build,      path: artifacts/linux }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/win/InspectifyScanner-Windows.exe
-            artifacts/mac/InspectifyScanner-macOS.dmg
-            artifacts/mac/InspectifyScanner-macOS-Intel.zip
-            artifacts/linux/InspectifyScanner-Linux.tar.gz
           draft: false
           prerelease: false
           generate_release_notes: true
+          files: |
+            artifacts/win/InspectifyScanner-Windows-x64.exe
+            artifacts/mac-arm64/InspectifyScanner-macOS-AppleSilicon.dmg
+            artifacts/mac-x64/InspectifyScanner-macOS-Intel.dmg
+            artifacts/linux/InspectifyScanner-Linux-x64
           body: |
             ## Inspectify Scanner
 
-            Hardware inspection tool for [Inspectify LapStore](https://inspectifylapstore.me).
+            Hardware inspection + marketplace tool for [Inspectify LapStore](https://inspectifylapstore.me).
 
-            ### Downloads
+            ### Downloads — no installation required, just download and run
 
-            - **Windows** (single .exe): `InspectifyScanner-Windows.exe` — double-click to run
-            - **macOS Apple Silicon** (M1/M2/M3/M4): `InspectifyScanner-macOS.dmg` — open DMG, drag to Applications
-            - **macOS Intel**: `InspectifyScanner-macOS-Intel.zip`
-            - **Linux**: `InspectifyScanner-Linux.tar.gz` — extract and run
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | **Windows 10/11** | `InspectifyScanner-Windows-x64.exe` | Double-click to run |
+            | **macOS Apple Silicon** (M1/M2/M3/M4) | `InspectifyScanner-macOS-AppleSilicon.dmg` | Open DMG → drag to Applications |
+            | **macOS Intel** | `InspectifyScanner-macOS-Intel.dmg` | Open DMG → drag to Applications |
+            | **Linux x64** | `InspectifyScanner-Linux-x64` | `chmod +x` then run |
 
-            No installation required — just download and run.
+            > **No .NET SDK or runtime required** — the runtime is bundled inside every binary.

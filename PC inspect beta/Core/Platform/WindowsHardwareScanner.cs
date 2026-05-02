@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management;
-using System.Windows.Forms;
 
 namespace PC_inspect_beta.Core.Platform
 {
@@ -108,24 +107,34 @@ namespace PC_inspect_beta.Core.Platform
 
         public BatteryInfo? GetBatteryInfo()
         {
-            var pw = SystemInformation.PowerStatus;
-            bool hasBattery = pw.BatteryChargeStatus != BatteryChargeStatus.NoSystemBattery
-                           && pw.BatteryChargeStatus != BatteryChargeStatus.Unknown;
-            if (!hasBattery) return null;
-
-            var info = new BatteryInfo
-            {
-                PercentRemaining = (int)(pw.BatteryLifePercent * 100),
-                IsCharging       = pw.PowerLineStatus == PowerLineStatus.Online
-            };
             try
             {
-                using var bq = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM BatteryFullChargedCapacity");
-                foreach (ManagementObject obj in bq.Get()) info.FullChargeCapacityMwh = Convert.ToInt32(obj["FullChargedCapacity"] ?? 0);
-                using var bd = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM BatteryStaticData");
-                foreach (ManagementObject obj in bd.Get()) info.DesignCapacityMwh = Convert.ToInt32(obj["DesignedCapacity"] ?? 0);
+                using var bq = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
+                foreach (ManagementObject obj in bq.Get())
+                {
+                    int status = Convert.ToInt32(obj["BatteryStatus"] ?? 0);
+                    // BatteryStatus: 2 = AC power (charging), 1 = discharging
+                    bool isCharging = status == 2 || status == 6 || status == 7 || status == 8 || status == 9;
+                    int percent = Convert.ToInt32(obj["EstimatedChargeRemaining"] ?? 0);
+
+                    var info = new BatteryInfo
+                    {
+                        PercentRemaining = percent,
+                        IsCharging       = isCharging
+                    };
+
+                    try
+                    {
+                        using var fc = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM BatteryFullChargedCapacity");
+                        foreach (ManagementObject o in fc.Get()) info.FullChargeCapacityMwh = Convert.ToInt32(o["FullChargedCapacity"] ?? 0);
+                        using var sd = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM BatteryStaticData");
+                        foreach (ManagementObject o in sd.Get()) info.DesignCapacityMwh = Convert.ToInt32(o["DesignedCapacity"] ?? 0);
+                    } catch { }
+
+                    return info;
+                }
             } catch { }
-            return info;
+            return null;
         }
 
         public List<DisplayInfo> GetDisplayInfo()

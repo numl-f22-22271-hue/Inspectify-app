@@ -15,7 +15,6 @@ namespace PC_inspect_beta.Core.Platform
             IsLinux   ? "Linux"   :
             "Unknown";
 
-        /// <summary>Returns a hardware scanner appropriate for the current OS.</summary>
         public static IHardwareScanner CreateScanner()
         {
 #if WINDOWS

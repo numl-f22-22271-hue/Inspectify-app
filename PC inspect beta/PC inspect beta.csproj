@@ -2,14 +2,16 @@
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
+		<TargetFramework>net8.0</TargetFramework>
 		<RootNamespace>PC_inspect_beta</RootNamespace>
 		<AssemblyName>InspectifyScanner</AssemblyName>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<ApplicationIcon>PC-a-icon.ico</ApplicationIcon>
-		<EnableWindowsTargeting>true</EnableWindowsTargeting>
 		<NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
+		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+		<PlatformTarget>AnyCPU</PlatformTarget>
 
 		<!-- Single-file publish settings -->
 		<PublishSingleFile>true</PublishSingleFile>
@@ -17,24 +19,14 @@
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
 		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<PublishReadyToRun>true</PublishReadyToRun>
 		<DebugType>embedded</DebugType>
 	</PropertyGroup>
 
-	<!-- Windows-only target: WinForms UI + ML.NET (x64) -->
-	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
-		<UseWindowsForms>true</UseWindowsForms>
-		<OutputType>WinExe</OutputType>
+	<!-- Windows-specific defines and manifest -->
+	<PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) OR $(RuntimeIdentifier.StartsWith('win'))">
 		<DefineConstants>$(DefineConstants);WINDOWS;HAS_ML</DefineConstants>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
-		<PlatformTarget>x64</PlatformTarget>
-	</PropertyGroup>
-
-	<!-- Cross-platform target: Mac/Linux Avalonia UI -->
-	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
-		<DefineConstants>$(DefineConstants);CROSSPLATFORM</DefineConstants>
-		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-		<PlatformTarget>AnyCPU</PlatformTarget>
 	</PropertyGroup>
 
 	<!-- Shared cross-platform packages -->
@@ -47,42 +39,41 @@
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />
 	</ItemGroup>
 
-	<!-- Windows-only packages (ML.NET requires x64/x86 — won't run on Apple Silicon) -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
-		<PackageReference Include="Microsoft.ML" Version="3.0.1" />
-		<PackageReference Include="Microsoft.ML.FastTree" Version="3.0.1" />
-		<PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
-		<PackageReference Include="System.Management" Version="10.0.1" />
-	</ItemGroup>
-
-	<!-- Cross-platform packages: Avalonia UI -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+	<!-- Avalonia UI packages — used on all platforms -->
+	<ItemGroup>
 		<PackageReference Include="Avalonia" Version="11.2.0" />
 		<PackageReference Include="Avalonia.Desktop" Version="11.2.0" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.0" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.0" />
 	</ItemGroup>
 
-	<!-- Exclude Windows-only files when building for Mac/Linux -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+	<!-- Windows-only packages: WMI + ML.NET (x64 only, won't run on Apple Silicon) -->
+	<ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) OR $(RuntimeIdentifier.StartsWith('win'))">
+		<PackageReference Include="Microsoft.ML" Version="3.0.1" />
+		<PackageReference Include="Microsoft.ML.FastTree" Version="3.0.1" />
+		<PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
+		<PackageReference Include="System.Management" Version="10.0.1" />
+	</ItemGroup>
+
+	<!-- Always exclude WinForms files — Avalonia is the UI layer on all platforms -->
+	<ItemGroup>
 		<Compile Remove="UI\Forms\**\*.cs" />
 		<Compile Remove="UI\Theme.cs" />
 		<Compile Remove="UI\UIHelper.cs" />
-		<Compile Remove="Core\PricePredictor.cs" />
 		<None Remove="UI\Forms\**\*.resx" />
 		<EmbeddedResource Remove="UI\Forms\**\*.resx" />
 	</ItemGroup>
 
-	<!-- Exclude cross-platform UI files when building for Windows -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
-		<Compile Remove="UI\Avalonia\**\*.cs" />
-		<AvaloniaResource Remove="UI\Avalonia\**\*.axaml" />
+	<!-- PricePredictor uses ML.NET — only compile when ML is available -->
+	<ItemGroup Condition="!($([MSBuild]::IsOSPlatform('Windows')) OR $(RuntimeIdentifier.StartsWith('win')))">
+		<Compile Remove="Core\PricePredictor.cs" />
 	</ItemGroup>
 
+	<!-- Embed the training dataset inside the binary — no side-by-side file needed -->
 	<ItemGroup>
-		<None Update="Data\laptop_dataset.csv">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
+		<EmbeddedResource Include="Data\laptop_dataset.csv">
+			<LogicalName>PC_inspect_beta.Data.laptop_dataset.csv</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 </Project>

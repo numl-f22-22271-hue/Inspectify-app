@@ -1,4 +1,3 @@
-#if !WINDOWS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -399,4 +398,3 @@ namespace PC_inspect_beta.UI.Avalonia
         };
     }
 }
-#endif
