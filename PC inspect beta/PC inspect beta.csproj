@@ -26,6 +26,7 @@
 	<!-- Windows-specific defines (WMI + ML.NET available) -->
 	<PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) OR $(RuntimeIdentifier.StartsWith('win'))">
 		<DefineConstants>$(DefineConstants);WINDOWS;HAS_ML</DefineConstants>
+		<PlatformTarget>x64</PlatformTarget>
 	</PropertyGroup>
 
 	<!-- Shared cross-platform packages -->
