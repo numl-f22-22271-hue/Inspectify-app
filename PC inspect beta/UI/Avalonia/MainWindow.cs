@@ -238,42 +238,6 @@ namespace PC_inspect_beta.UI.Avalonia
             SetStatus("Starting scan…", "#f59e0b");
             _output.Text = "";
 
-            try
-            {
-#if WINDOWS
-                _lastScan = await DiagnosticsEngine.RunFullScan(msg =>
-                {
-                    Dispatcher.UIThread.InvokeAsync(() => SetStatus(msg, "#f59e0b"));
-                });
-
-                _ = Task.Run(() => PricePredictor.EnsureTrained());
-#else
-                _lastScan = await RunCrossPlatformScanAsync();
-#if HAS_ML
-                _ = Task.Run(() => PricePredictor.EnsureTrained());
-#endif
-#endif
-
-                SetStatus("Scan complete ✔", "#10b981");
-                _exportPdfBtn.IsEnabled = true;
-                _postAdBtn.IsEnabled = true;
-                _output.Text = _lastScan.ReportText.Replace("##", "");
-            }
-            catch (Exception ex)
-            {
-                SetStatus("Scan failed.", "#ef4444");
-                _output.Text = $"[ERROR] {ex.Message}";
-            }
-            finally
-            {
-                _scanBtn.IsEnabled = true;
-                _progress.IsVisible = false;
-            }
-        }
-
-#if !WINDOWS
-        private async Task<ScanResult> RunCrossPlatformScanAsync()
-        {
             var sb = new StringBuilder();
             sb.AppendLine("╔══════════════════════════════════════════╗");
             sb.AppendLine("║      INSPECTIFY — HARDWARE REPORT        ║");
@@ -283,140 +247,164 @@ namespace PC_inspect_beta.UI.Avalonia
             sb.AppendLine();
 
             var result = new ScanResult();
-            var scanner = await Task.Run(() => PlatformDetector.CreateScanner());
 
-            await UpdateAsync("Detecting CPU…", sb);
-            var cpu = await Task.Run(scanner.GetCpuInfo);
-            AppendSection(sb, "CPU");
-            sb.AppendLine($"  Model       : {cpu.Name}");
-            sb.AppendLine($"  Cores       : {cpu.Cores}");
-            sb.AppendLine($"  Threads     : {cpu.Threads}");
-            sb.AppendLine($"  Max Clock   : {cpu.MaxClockMhz} MHz");
-            sb.AppendLine();
-            result.Metadata["cpu_name"] = cpu.Name;
-            result.Metadata["cpu_cores"] = cpu.Cores;
-            result.Metadata["cpu_threads"] = cpu.Threads;
-
-            await UpdateAsync("Reading RAM…", sb);
-            var ram = await Task.Run(scanner.GetRamInfo);
-            AppendSection(sb, "RAM");
-            sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ram.TotalMb} MB)");
-            sb.AppendLine($"  Available   : {ram.AvailableMb / 1024.0:F1} GB");
-            foreach (var s in ram.Sticks)
-                sb.AppendLine($"  Stick       : {s.CapacityMb} MB {s.Type} {s.Manufacturer}");
-            sb.AppendLine();
-            result.Metadata["ram_total_gb"] = ram.TotalMb / 1024;
-
-            await UpdateAsync("Scanning storage…", sb);
-            var storage = await Task.Run(scanner.GetStorageInfo);
-            AppendSection(sb, "STORAGE");
-            long totalStorage = 0;
-            foreach (var d in storage)
+            try
             {
-                sb.AppendLine($"  {d.Mount,-10} {d.CapacityGb} GB ({d.FreeGb} GB free) — {d.Type} — {d.Model}");
-                totalStorage += d.CapacityGb;
-            }
-            sb.AppendLine();
-            result.Metadata["storage_total_gb"] = totalStorage;
-            result.Metadata["storage_type"] = storage.FirstOrDefault()?.Type ?? "";
+                var scanner = await Task.Run(() => PlatformDetector.CreateScanner());
 
-            await UpdateAsync("Checking GPU…", sb);
-            var gpus = await Task.Run(scanner.GetGpuInfo);
-            AppendSection(sb, "GPU");
-            foreach (var g in gpus)
-                sb.AppendLine($"  {g.Name}  {(g.VramMb > 0 ? $"({g.VramMb} MB VRAM)" : "")}");
-            sb.AppendLine();
-            result.Metadata["gpu_name"] = gpus.FirstOrDefault()?.Name ?? "";
+                await UpdateAsync("Detecting CPU…", sb);
+                var cpu = await Task.Run(scanner.GetCpuInfo);
+                AppendSection(sb, "CPU");
+                sb.AppendLine($"  Model       : {cpu.Name}");
+                sb.AppendLine($"  Cores       : {cpu.Cores}");
+                sb.AppendLine($"  Threads     : {cpu.Threads}");
+                sb.AppendLine($"  Max Clock   : {cpu.MaxClockMhz} MHz");
+                sb.AppendLine();
+                result.Metadata["cpu_name"] = cpu.Name;
+                result.Metadata["cpu_cores"] = cpu.Cores;
+                result.Metadata["cpu_threads"] = cpu.Threads;
 
-            await UpdateAsync("Reading battery info…", sb);
-            var bat = await Task.Run(scanner.GetBatteryInfo);
-            AppendSection(sb, "BATTERY");
-            if (bat == null)
-                sb.AppendLine("  No battery (Desktop)");
-            else
-            {
-                sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging)" : "(on battery)")}");
-                if (bat.DesignCapacityMwh > 0)
-                    sb.AppendLine($"  Health      : {bat.HealthPercent}% ({bat.FullChargeCapacityMwh} / {bat.DesignCapacityMwh} mWh)");
-                result.Metadata["battery_percent"] = bat.PercentRemaining;
-                result.Metadata["battery_health"] = bat.HealthPercent;
-            }
-            sb.AppendLine();
+                await UpdateAsync("Reading RAM…", sb);
+                var ram = await Task.Run(scanner.GetRamInfo);
+                AppendSection(sb, "RAM");
+                sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ram.TotalMb} MB)");
+                sb.AppendLine($"  Available   : {ram.AvailableMb / 1024.0:F1} GB");
+                foreach (var s in ram.Sticks)
+                    sb.AppendLine($"  Stick       : {s.CapacityMb} MB {s.Type} {s.Manufacturer}");
+                sb.AppendLine();
+                result.Metadata["ram_total_gb"] = ram.TotalMb / 1024;
 
-            await UpdateAsync("Scanning displays…", sb);
-            var displays = await Task.Run(scanner.GetDisplayInfo);
-            AppendSection(sb, "DISPLAY");
-            foreach (var d in displays)
-                sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
-            sb.AppendLine();
+                await UpdateAsync("Scanning storage…", sb);
+                var storage = await Task.Run(scanner.GetStorageInfo);
+                AppendSection(sb, "STORAGE");
+                long totalStorage = 0;
+                foreach (var d in storage)
+                {
+                    sb.AppendLine($"  {d.Mount,-10} {d.CapacityGb} GB ({d.FreeGb} GB free) — {d.Type} — {d.Model}");
+                    totalStorage += d.CapacityGb;
+                }
+                sb.AppendLine();
+                result.Metadata["storage_total_gb"] = totalStorage;
+                result.Metadata["storage_type"] = storage.FirstOrDefault()?.Type ?? "";
 
-            await UpdateAsync("Reading BIOS info…", sb);
-            var bios = await Task.Run(scanner.GetBiosInfo);
-            AppendSection(sb, "BIOS / MOTHERBOARD");
-            sb.AppendLine($"  Manufacturer: {bios.Manufacturer}");
-            sb.AppendLine($"  Version     : {bios.Version}");
-            sb.AppendLine($"  Model       : {bios.MotherboardModel}");
-            sb.AppendLine();
+                await UpdateAsync("Checking GPU…", sb);
+                var gpus = await Task.Run(scanner.GetGpuInfo);
+                AppendSection(sb, "GPU");
+                foreach (var g in gpus)
+                    sb.AppendLine($"  {g.Name}  {(g.VramMb > 0 ? $"({g.VramMb} MB VRAM)" : "")}");
+                sb.AppendLine();
+                result.Metadata["gpu_name"] = gpus.FirstOrDefault()?.Name ?? "";
 
-            await UpdateAsync("Scanning network cards…", sb);
-            var nets = await Task.Run(scanner.GetNetworkInfo);
-            AppendSection(sb, "NETWORK");
-            foreach (var n in nets)
-                sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
-            sb.AppendLine();
+                await UpdateAsync("Reading battery info…", sb);
+                var bat = await Task.Run(scanner.GetBatteryInfo);
+                AppendSection(sb, "BATTERY");
+                if (bat == null)
+                    sb.AppendLine("  No battery (Desktop)");
+                else
+                {
+                    sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging)" : "(on battery)")}");
+                    if (bat.DesignCapacityMwh > 0)
+                        sb.AppendLine($"  Health      : {bat.HealthPercent}% ({bat.FullChargeCapacityMwh} / {bat.DesignCapacityMwh} mWh)");
+                    result.Metadata["battery_percent"] = bat.PercentRemaining;
+                    result.Metadata["battery_health"] = bat.HealthPercent;
+                }
+                sb.AppendLine();
 
-            await UpdateAsync("Scanning OS…", sb);
-            var os = await Task.Run(scanner.GetOsInfo);
-            AppendSection(sb, "OS & POWER");
-            sb.AppendLine($"  Name        : {os.Name}");
-            sb.AppendLine($"  Version     : {os.Version}");
-            sb.AppendLine($"  Architecture: {os.Architecture}");
-            sb.AppendLine($"  Uptime      : {os.Uptime}");
-            sb.AppendLine();
-            result.Metadata["os_version"] = os.Version;
-            result.Metadata["architecture"] = os.Architecture;
+                await UpdateAsync("Scanning displays…", sb);
+                var displays = await Task.Run(scanner.GetDisplayInfo);
+                AppendSection(sb, "DISPLAY");
+                foreach (var d in displays)
+                    sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
+                sb.AppendLine();
 
-            await UpdateAsync("RAM stress test…", sb);
-            var ramStress = await Task.Run(StressTestEngine.RunRamStress);
-            AppendSection(sb, "STRESS TEST — RAM");
-            sb.AppendLine($"  {ramStress.Summary}");
-            sb.AppendLine($"  Result      : {(ramStress.Passed ? "PASSED" : "FAILED")}");
-            if (ramStress.Metrics.TryGetValue("write_speed_mbs", out var wsm))
-                result.Metadata["ram_write_speed_mbs"] = wsm;
-            result.Metadata["stress_ram"] = ramStress.Passed ? "Passed" : "Failed";
-            sb.AppendLine();
+                await UpdateAsync("Reading BIOS info…", sb);
+                var bios = await Task.Run(scanner.GetBiosInfo);
+                AppendSection(sb, "BIOS / MOTHERBOARD");
+                sb.AppendLine($"  Manufacturer: {bios.Manufacturer}");
+                sb.AppendLine($"  Version     : {bios.Version}");
+                sb.AppendLine($"  Model       : {bios.MotherboardModel}");
+                sb.AppendLine();
+                result.Metadata["motherboard"] = bios.MotherboardModel;
 
-            await UpdateAsync("CPU stress test…", sb);
-            var cpuStress = await Task.Run(StressTestEngine.RunCpuStress);
-            AppendSection(sb, "STRESS TEST — CPU");
-            sb.AppendLine($"  {cpuStress.Summary}");
-            sb.AppendLine($"  Result      : {(cpuStress.Passed ? "PASSED" : "FAILED")}");
-            result.Metadata["stress_cpu"] = cpuStress.Passed ? "Passed" : "Failed";
-            sb.AppendLine();
+                await UpdateAsync("Scanning network cards…", sb);
+                var nets = await Task.Run(scanner.GetNetworkInfo);
+                AppendSection(sb, "NETWORK");
+                foreach (var n in nets)
+                    sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
+                sb.AppendLine();
 
-            await UpdateAsync("GPU/compute stress test…", sb);
-            var gpuStress = await Task.Run(StressTestEngine.RunGpuStress);
-            AppendSection(sb, "STRESS TEST — GPU/COMPUTE");
-            sb.AppendLine($"  {gpuStress.Summary}");
-            sb.AppendLine($"  Result      : {(gpuStress.Passed ? "PASSED" : "FAILED")}");
-            result.Metadata["stress_gpu"] = gpuStress.Passed ? "Passed" : "Failed";
-            sb.AppendLine();
+                await UpdateAsync("Scanning OS…", sb);
+                var os = await Task.Run(scanner.GetOsInfo);
+                AppendSection(sb, "OS & POWER");
+                sb.AppendLine($"  Name        : {os.Name}");
+                sb.AppendLine($"  Version     : {os.Version}");
+                sb.AppendLine($"  Architecture: {os.Architecture}");
+                sb.AppendLine($"  Uptime      : {os.Uptime}");
+                sb.AppendLine();
+                result.Metadata["os_version"] = os.Version;
+                result.Metadata["architecture"] = os.Architecture;
 
-            await UpdateAsync("Storage R/W speed test…", sb);
-            var storageStress = await Task.Run(StressTestEngine.RunStorageStress);
-            AppendSection(sb, "STRESS TEST — STORAGE");
-            foreach (var s in storageStress)
-            {
-                sb.AppendLine($"  {s.Name}");
-                sb.AppendLine($"    {s.Summary}");
-                sb.AppendLine($"    Result    : {(s.Passed ? "PASSED" : "FAILED")}");
-            }
-            result.Metadata["stress_storage"] = storageStress.All(s => s.Passed) ? "Passed" : "Failed";
+                await UpdateAsync("RAM stress test…", sb);
+                var ramStress = await Task.Run(StressTestEngine.RunRamStress);
+                AppendSection(sb, "STRESS TEST — RAM");
+                sb.AppendLine($"  {ramStress.Summary}");
+                sb.AppendLine($"  Result      : {(ramStress.Passed ? "PASSED" : "FAILED")}");
+                if (ramStress.Metrics.TryGetValue("write_speed_mbs", out var wsm))
+                    result.Metadata["ram_write_speed_mbs"] = wsm;
+                result.Metadata["stress_ram"] = ramStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
 
-            result.ReportText = sb.ToString();
-            return result;
-        }
+                await UpdateAsync("CPU stress test…", sb);
+                var cpuStress = await Task.Run(StressTestEngine.RunCpuStress);
+                AppendSection(sb, "STRESS TEST — CPU");
+                sb.AppendLine($"  {cpuStress.Summary}");
+                sb.AppendLine($"  Result      : {(cpuStress.Passed ? "PASSED" : "FAILED")}");
+                result.Metadata["stress_cpu"] = cpuStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
+
+                await UpdateAsync("GPU/compute stress test…", sb);
+                var gpuStress = await Task.Run(StressTestEngine.RunGpuStress);
+                AppendSection(sb, "STRESS TEST — GPU/COMPUTE");
+                sb.AppendLine($"  {gpuStress.Summary}");
+                sb.AppendLine($"  Result      : {(gpuStress.Passed ? "PASSED" : "FAILED")}");
+                result.Metadata["stress_gpu"] = gpuStress.Passed ? "Passed" : "Failed";
+                sb.AppendLine();
+
+                await UpdateAsync("Storage R/W speed test…", sb);
+                var storageStress = await Task.Run(StressTestEngine.RunStorageStress);
+                AppendSection(sb, "STRESS TEST — STORAGE");
+                foreach (var s in storageStress)
+                {
+                    sb.AppendLine($"  {s.Name}");
+                    sb.AppendLine($"    {s.Summary}");
+                    sb.AppendLine($"    Result    : {(s.Passed ? "PASSED" : "FAILED")}");
+                }
+                result.Metadata["stress_storage"] = storageStress.All(s => s.Passed) ? "Passed" : "Failed";
+
+                result.ReportText = sb.ToString();
+                _lastScan = result;
+
+#if HAS_ML
+                _ = Task.Run(() => PricePredictor.EnsureTrained());
 #endif
+
+                SetStatus("Scan complete ✔", "#10b981");
+                _exportPdfBtn.IsEnabled = true;
+                _postAdBtn.IsEnabled = true;
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"[ERROR] {ex.Message}");
+                SetStatus("Scan failed.", "#ef4444");
+            }
+            finally
+            {
+                _output.Text = sb.ToString();
+                _scanBtn.IsEnabled = true;
+                _progress.IsVisible = false;
+            }
+        }
 
         private void SetStatus(string msg, string color)
         {
