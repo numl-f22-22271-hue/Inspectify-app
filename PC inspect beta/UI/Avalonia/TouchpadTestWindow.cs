@@ -13,6 +13,7 @@ namespace PC_inspect_beta.UI.Avalonia
         public bool RightButtonPressed { get; private set; }
         public bool Skipped { get; private set; }
         public bool Finished { get; private set; }
+        public bool SubmitRequested { get; private set; }
 
         private Border _pnlLeft = null!, _pnlRight = null!;
         private TextBlock _lblLeftBox = null!, _lblRightBox = null!;
@@ -244,6 +245,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 Background = new SolidColorBrush(Color.Parse("#16212e"))
             };
 
+            msgWindow.Height = 200;
+
             var stack = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
             stack.Children.Add(new TextBlock
             {
@@ -254,6 +257,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 FontSize = 14,
                 TextWrapping = TextWrapping.Wrap
             });
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center };
             var okBtn = new Button
             {
                 Content = "OK",
@@ -262,11 +266,24 @@ namespace PC_inspect_beta.UI.Avalonia
                 Width = 100,
                 Height = 36,
                 CornerRadius = new CornerRadius(6),
-                HorizontalAlignment = HorizontalAlignment.Center,
                 HorizontalContentAlignment = HorizontalAlignment.Center
             };
             okBtn.Click += (_, _) => { msgWindow.Close(); Close(); };
-            stack.Children.Add(okBtn);
+            var submitBtn = new Button
+            {
+                Content = "Upload / Sell Device",
+                Background = new SolidColorBrush(Color.Parse("#10b981")),
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.SemiBold,
+                Height = 36,
+                Padding = new Thickness(16, 0),
+                CornerRadius = new CornerRadius(6),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            submitBtn.Click += (_, _) => { SubmitRequested = true; msgWindow.Close(); Close(); };
+            btnRow.Children.Add(okBtn);
+            btnRow.Children.Add(submitBtn);
+            stack.Children.Add(btnRow);
             msgWindow.Content = stack;
             msgWindow.ShowDialog(this);
         }
