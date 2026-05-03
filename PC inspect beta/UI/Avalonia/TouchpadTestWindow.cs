@@ -9,11 +9,6 @@ using Avalonia.Media;
 
 namespace PC_inspect_beta.UI.Avalonia
 {
-    /// <summary>
-    /// Touchpad test window. The user moves the cursor over a canvas to draw
-    /// a trail; coverage is tracked via a grid of cells. Helps verify touchpad
-    /// works edge-to-edge with no dead zones.
-    /// </summary>
     public class TouchpadTestWindow : Window
     {
         private const int GridCols = 24;
@@ -22,10 +17,15 @@ namespace PC_inspect_beta.UI.Avalonia
         private Canvas _canvas = null!;
         private TextBlock _coverageText = null!;
         private TextBlock _clickText = null!;
-        private Button _resetBtn = null!;
         private readonly bool[,] _covered = new bool[GridCols, GridRows];
+        private readonly Rectangle[,] _cells = new Rectangle[GridCols, GridRows];
         private int _leftClicks, _rightClicks;
         private double _cellW, _cellH;
+        private bool _gridBuilt;
+
+        private static readonly SolidColorBrush CoveredBrush = new(Color.Parse("#10b981"));
+        private static readonly SolidColorBrush UncoveredBrush = new(Color.Parse("#1e2a3a"));
+        private static readonly SolidColorBrush GridLineBrush = new(Color.Parse("#243447"));
 
         public TouchpadTestWindow()
         {
@@ -42,7 +42,6 @@ namespace PC_inspect_beta.UI.Avalonia
         {
             var root = new DockPanel();
 
-            // Header
             var header = new Border
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
@@ -68,7 +67,6 @@ namespace PC_inspect_beta.UI.Avalonia
             header.Child = headStack;
             root.Children.Add(header);
 
-            // Footer with stats
             var footer = new Border
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
@@ -98,7 +96,7 @@ namespace PC_inspect_beta.UI.Avalonia
             };
             footStack.Children.Add(_clickText);
 
-            _resetBtn = new Button
+            var resetBtn = new Button
             {
                 Content = "Reset",
                 Background = new SolidColorBrush(Color.Parse("#243447")),
@@ -107,26 +105,31 @@ namespace PC_inspect_beta.UI.Avalonia
                 Padding = new Thickness(20, 8),
                 HorizontalAlignment = HorizontalAlignment.Right
             };
-            _resetBtn.Click += (_, _) => Reset();
-            DockPanel.SetDock(_resetBtn, Dock.Right);
+            resetBtn.Click += (_, _) => Reset();
+            DockPanel.SetDock(resetBtn, Dock.Right);
             footer.Child = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*, Auto"),
-                Children = { footStack, AddTo(_resetBtn, col: 1) }
+                Children = { footStack, AddTo(resetBtn, col: 1) }
             };
             root.Children.Add(footer);
 
-            // Canvas
             _canvas = new Canvas
             {
                 Background = new SolidColorBrush(Color.Parse("#0d1620"))
             };
             _canvas.PointerMoved += OnPointerMoved;
             _canvas.PointerPressed += OnPointerPressed;
-            _canvas.LayoutUpdated += (_, _) => DrawGrid();
             root.Children.Add(_canvas);
 
             Content = root;
+
+            // Build the grid once the canvas has a real size
+            _canvas.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == BoundsProperty)
+                    RebuildGrid();
+            };
         }
 
         private static Control AddTo(Control c, int col)
@@ -135,14 +138,14 @@ namespace PC_inspect_beta.UI.Avalonia
             return c;
         }
 
-        private void DrawGrid()
+        private void RebuildGrid()
         {
-            _canvas.Children.Clear();
             if (_canvas.Bounds.Width <= 0 || _canvas.Bounds.Height <= 0) return;
 
             _cellW = _canvas.Bounds.Width / GridCols;
             _cellH = _canvas.Bounds.Height / GridRows;
 
+            _canvas.Children.Clear();
             for (int x = 0; x < GridCols; x++)
             {
                 for (int y = 0; y < GridRows; y++)
@@ -151,21 +154,23 @@ namespace PC_inspect_beta.UI.Avalonia
                     {
                         Width = _cellW - 1,
                         Height = _cellH - 1,
-                        Fill = _covered[x, y]
-                            ? new SolidColorBrush(Color.Parse("#10b981"))
-                            : new SolidColorBrush(Color.Parse("#1e2a3a")),
-                        Stroke = new SolidColorBrush(Color.Parse("#243447")),
+                        Fill = _covered[x, y] ? CoveredBrush : UncoveredBrush,
+                        Stroke = GridLineBrush,
                         StrokeThickness = 0.5
                     };
                     Canvas.SetLeft(cell, x * _cellW);
                     Canvas.SetTop(cell, y * _cellH);
                     _canvas.Children.Add(cell);
+                    _cells[x, y] = cell;
                 }
             }
+            _gridBuilt = true;
         }
 
         private void OnPointerMoved(object? sender, PointerEventArgs e)
         {
+            if (!_gridBuilt || _cellW <= 0 || _cellH <= 0) return;
+
             var pt = e.GetPosition(_canvas);
             int gx = Math.Clamp((int)(pt.X / _cellW), 0, GridCols - 1);
             int gy = Math.Clamp((int)(pt.Y / _cellH), 0, GridRows - 1);
@@ -173,7 +178,7 @@ namespace PC_inspect_beta.UI.Avalonia
             if (!_covered[gx, gy])
             {
                 _covered[gx, gy] = true;
-                DrawGrid();
+                _cells[gx, gy].Fill = CoveredBrush;
                 UpdateCoverage();
             }
         }
@@ -202,7 +207,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 for (int y = 0; y < GridRows; y++)
                     _covered[x, y] = false;
             _leftClicks = _rightClicks = 0;
-            DrawGrid();
+            _gridBuilt = false;
+            RebuildGrid();
             UpdateCoverage();
             _clickText.Text = "Left clicks: 0  •  Right clicks: 0";
         }
