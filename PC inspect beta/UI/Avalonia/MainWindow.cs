@@ -523,8 +523,6 @@ namespace PC_inspect_beta.UI.Avalonia
                     passed ? "#10b981" : "#f59e0b");
             }
 
-            if (kt.SubmitRequested && _lastScan != null)
-                await SellDeviceAsync();
         }
 
         private async Task RunTouchpadTestAsync()
@@ -555,8 +553,6 @@ namespace PC_inspect_beta.UI.Avalonia
                     passed ? "#10b981" : "#f59e0b");
             }
 
-            if (tt.SubmitRequested && _lastScan != null)
-                await SellDeviceAsync();
         }
 
         private void SetStatus(string msg, string color)

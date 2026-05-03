@@ -14,7 +14,6 @@ namespace PC_inspect_beta.UI.Avalonia
     {
         public List<string> FailedKeys { get; private set; } = new();
         public bool Finished { get; private set; }
-        public bool SubmitRequested { get; private set; }
 
         private readonly Dictionary<string, Border> _keyMap = new();
         private readonly HashSet<string> _pressed = new();
@@ -27,12 +26,21 @@ namespace PC_inspect_beta.UI.Avalonia
         private static readonly SolidColorBrush ColMissed = new(Color.Parse("#dc3545"));
         private static readonly SolidColorBrush ColSkipped = new(Color.Parse("#282832"));
 
-        private static readonly HashSet<string> OptionalKeys = new()
+        private static readonly HashSet<string> WindowsOptionalKeys = new()
         {
             "INS", "DEL", "HOME", "END", "PGUP", "PGDN",
             "LCTRL", "RCTRL", "LSHIFT", "RSHIFT", "LWIN", "LALT", "RALT",
-            "FN", "⌃", "⌥", "⌘"
+            "FN", "TAB"
         };
+
+        private static readonly HashSet<string> MacOptionalKeys = new()
+        {
+            "INS", "DEL", "HOME", "END", "PGUP", "PGDN",
+            "LCTRL", "RCTRL", "LSHIFT", "RSHIFT", "LWIN", "RWIN", "LALT", "RALT",
+            "FN", "TAB", "CAPSLOCK", "⌃", "⌥", "⌘"
+        };
+
+        private static HashSet<string> OptionalKeys => IsMac ? MacOptionalKeys : WindowsOptionalKeys;
 
         private static readonly (string Label, string Id, int Width)[][] WindowsRows =
         {
@@ -250,7 +258,7 @@ namespace PC_inspect_beta.UI.Avalonia
             {
                 Title = "Keyboard Result",
                 Width = 420,
-                Height = 220,
+                Height = 180,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = new SolidColorBrush(Color.Parse("#16212e"))
@@ -270,7 +278,6 @@ namespace PC_inspect_beta.UI.Avalonia
                 FontSize = 14,
                 TextWrapping = TextWrapping.Wrap
             });
-            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center };
             var okBtn = new Button
             {
                 Content = "OK",
@@ -279,24 +286,11 @@ namespace PC_inspect_beta.UI.Avalonia
                 Width = 100,
                 Height = 36,
                 CornerRadius = new CornerRadius(6),
+                HorizontalAlignment = HorizontalAlignment.Center,
                 HorizontalContentAlignment = HorizontalAlignment.Center
             };
             okBtn.Click += (_, _) => { msgWindow.Close(); Close(); };
-            var submitBtn = new Button
-            {
-                Content = "Upload / Sell Device",
-                Background = new SolidColorBrush(Color.Parse("#10b981")),
-                Foreground = Brushes.White,
-                FontWeight = FontWeight.SemiBold,
-                Height = 36,
-                Padding = new Thickness(16, 0),
-                CornerRadius = new CornerRadius(6),
-                HorizontalContentAlignment = HorizontalAlignment.Center
-            };
-            submitBtn.Click += (_, _) => { SubmitRequested = true; msgWindow.Close(); Close(); };
-            btnRow.Children.Add(okBtn);
-            btnRow.Children.Add(submitBtn);
-            stack.Children.Add(btnRow);
+            stack.Children.Add(okBtn);
             msgWindow.Content = stack;
             msgWindow.ShowDialog(this);
         }
