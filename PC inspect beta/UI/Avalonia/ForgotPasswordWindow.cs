@@ -61,7 +61,7 @@ namespace PC_inspect_beta.UI.Avalonia
             form.Children.Add(MakeLabel("Verify Email"));
             _txtEmail = MakeInput(); form.Children.Add(_txtEmail);
 
-            form.Children.Add(MakeLabel("Verify Date of Birth"));
+            form.Children.Add(MakeLabel("Verify Date of Birth (DD/MM/YYYY)"));
             _dtpBirth = new DatePicker
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),

@@ -76,7 +76,7 @@ namespace PC_inspect_beta.UI.Avalonia
 
             form.Children.Add(new TextBlock
             {
-                Text = "Sign in with your Inspectify LapStore account",
+                Text = "Sign in with your Inspectify LapStore account credentials",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
                 HorizontalAlignment = HorizontalAlignment.Center
