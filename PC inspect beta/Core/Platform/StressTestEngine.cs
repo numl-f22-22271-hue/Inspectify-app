@@ -181,14 +181,14 @@ namespace PC_inspect_beta.Core.Platform
             var writeBuffer = new byte[4 * 1024 * 1024];
             new Random(1).NextBytes(writeBuffer);
 
-            foreach (var drive in DriveInfo.GetDrives()
-                                          .Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
+            var testPaths = GetWritableStoragePaths();
+
+            foreach (var (label, testDir) in testPaths)
             {
-                var r = new StressResult { Name = $"Storage Speed — {drive.Name}" };
-                string tmpFile = Path.Combine(drive.RootDirectory.FullName, "__pctest_tmp.bin");
+                var r = new StressResult { Name = $"Storage Speed — {label}" };
+                string tmpFile = Path.Combine(testDir, "__pctest_tmp.bin");
                 try
                 {
-                    // Write test
                     long written = 0;
                     var wSw = Stopwatch.StartNew();
                     using (var fs = new FileStream(tmpFile, FileMode.Create, FileAccess.Write,
@@ -205,7 +205,6 @@ namespace PC_inspect_beta.Core.Platform
                     wSw.Stop();
                     double writeMBs = FILE_SIZE_MB / Math.Max(0.01, wSw.Elapsed.TotalSeconds);
 
-                    // Read test
                     var readBuf = new byte[4 * 1024 * 1024];
                     var rSw = Stopwatch.StartNew();
                     using (var fs = new FileStream(tmpFile, FileMode.Open, FileAccess.Read,
@@ -237,6 +236,33 @@ namespace PC_inspect_beta.Core.Platform
             }
 
             return results;
+        }
+
+        private static List<(string Label, string Path)> GetWritableStoragePaths()
+        {
+            var paths = new List<(string, string)>();
+
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                foreach (var drive in DriveInfo.GetDrives()
+                             .Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
+                    paths.Add((drive.Name, drive.RootDirectory.FullName));
+            }
+            else
+            {
+                // macOS/Linux: test user home directory (on the main disk)
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!string.IsNullOrEmpty(home) && Directory.Exists(home))
+                    paths.Add((home, home));
+                else
+                {
+                    var tmp = Path.GetTempPath();
+                    paths.Add((tmp, tmp));
+                }
+            }
+
+            return paths;
         }
     }
 }

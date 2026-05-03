@@ -8,14 +8,8 @@ using System.Text.Json;
 
 namespace PC_inspect_beta.Core.Platform
 {
-    /// <summary>
-    /// macOS hardware scanner.
-    /// Uses sysctl, system_profiler, ioreg, and pmset (all built-in to macOS).
-    /// </summary>
     public class MacOSHardwareScanner : IHardwareScanner
     {
-        // ── Helpers ────────────────────────────────────────────────────────
-
         private static string Run(string cmd, string args, int timeoutMs = 10000)
         {
             try
@@ -48,8 +42,6 @@ namespace PC_inspect_beta.Core.Platform
             catch { return default; }
         }
 
-        // ── Implementations ────────────────────────────────────────────────
-
         public OsInfo GetOsInfo()
         {
             var info = new OsInfo
@@ -59,13 +51,19 @@ namespace PC_inspect_beta.Core.Platform
                 Architecture = Sysctl("hw.machine")
             };
 
-            // Uptime in seconds
-            var bootSec = Sysctl("kern.boottime");
-            if (long.TryParse(Sysctl("kern.boottime").Split('=').LastOrDefault()?.Trim(','),
-                              NumberStyles.Integer, CultureInfo.InvariantCulture, out var bt))
+            // kern.boottime returns something like: { sec = 1716000000, usec = 0 }
+            var bootRaw = Sysctl("kern.boottime");
+            // Extract the sec value
+            var secIdx = bootRaw.IndexOf("sec =", StringComparison.Ordinal);
+            if (secIdx >= 0)
             {
-                var uptime = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() - bt);
-                info.Uptime = $"{(int)uptime.TotalDays}d {uptime.Hours:D2}:{uptime.Minutes:D2}:{uptime.Seconds:D2}";
+                var afterSec = bootRaw[(secIdx + 5)..].Trim();
+                var numStr = new string(afterSec.TakeWhile(c => char.IsDigit(c)).ToArray());
+                if (long.TryParse(numStr, out var bootSec))
+                {
+                    var uptime = TimeSpan.FromSeconds(DateTimeOffset.Now.ToUnixTimeSeconds() - bootSec);
+                    info.Uptime = $"{(int)uptime.TotalDays}d {uptime.Hours:D2}:{uptime.Minutes:D2}:{uptime.Seconds:D2}";
+                }
             }
             return info;
         }
@@ -78,15 +76,31 @@ namespace PC_inspect_beta.Core.Platform
                 Architecture = Sysctl("hw.machine")
             };
 
+            // Apple Silicon: brand_string may be empty, use hw.model
+            if (string.IsNullOrWhiteSpace(info.Name))
+                info.Name = Sysctl("hw.model");
+
             int.TryParse(Sysctl("hw.physicalcpu"), out var cores);
             int.TryParse(Sysctl("hw.logicalcpu"),  out var threads);
             info.Cores   = cores;
             info.Threads = threads;
 
-            // Apple Silicon doesn't expose clock speed via sysctl on modern macOS.
-            // Try cpufrequency (works on Intel Macs).
+            // Intel Macs expose clock speed via sysctl
             if (long.TryParse(Sysctl("hw.cpufrequency_max"), out var hz) && hz > 0)
                 info.MaxClockMhz = (int)(hz / 1_000_000);
+            else
+            {
+                // Apple Silicon: try to get performance core freq from ioreg
+                var ioreg = Run("/usr/sbin/ioreg", "-r -d1 -c IOPlatformDevice");
+                foreach (var line in ioreg.Split('\n'))
+                {
+                    if (line.Contains("\"nominal-frequency\"") || line.Contains("\"clock-frequency\""))
+                    {
+                        var val = ParseInt(line);
+                        if (val > 0) { info.MaxClockMhz = val / 1_000_000; break; }
+                    }
+                }
+            }
 
             return info;
         }
@@ -97,9 +111,8 @@ namespace PC_inspect_beta.Core.Platform
             if (long.TryParse(Sysctl("hw.memsize"), out var bytes))
                 info.TotalMb = bytes / 1024 / 1024;
 
-            // available memory: vm_stat is more accurate
             var vmStat = Run("/usr/bin/vm_stat", "");
-            const long pageSize = 4096; // typical
+            const long pageSize = 16384; // Apple Silicon uses 16 KB pages
             long freePages = 0, inactivePages = 0;
             foreach (var line in vmStat.Split('\n'))
             {
@@ -108,7 +121,16 @@ namespace PC_inspect_beta.Core.Platform
                 if (line.StartsWith("Pages inactive:"))
                     long.TryParse(line.Split(':')[1].Trim().TrimEnd('.'), out inactivePages);
             }
-            info.AvailableMb = (freePages + inactivePages) * pageSize / 1024 / 1024;
+            // Detect actual page size from vm_stat header
+            var headerLine = vmStat.Split('\n').FirstOrDefault() ?? "";
+            long actualPageSize = pageSize;
+            if (headerLine.Contains("page size of"))
+            {
+                var pageStr = new string(headerLine.Where(char.IsDigit).ToArray());
+                if (long.TryParse(pageStr, out var ps) && ps > 0)
+                    actualPageSize = ps;
+            }
+            info.AvailableMb = (freePages + inactivePages) * actualPageSize / 1024 / 1024;
 
             // Stick details from system_profiler SPMemoryDataType
             var mem = SystemProfilerJson("SPMemoryDataType");
@@ -116,17 +138,75 @@ namespace PC_inspect_beta.Core.Platform
                 mem.TryGetProperty("SPMemoryDataType", out var arr) &&
                 arr.ValueKind == JsonValueKind.Array)
             {
-                foreach (var stick in arr.EnumerateArray())
+                foreach (var entry in arr.EnumerateArray())
                 {
-                    var s = new RamStick();
-                    if (stick.TryGetProperty("dimm_size", out var sz)) s.CapacityMb = ParseSize(sz.GetString() ?? "");
-                    if (stick.TryGetProperty("dimm_manufacturer", out var mfr)) s.Manufacturer = mfr.GetString() ?? "";
-                    if (stick.TryGetProperty("dimm_speed", out var sp)) int.TryParse(new string((sp.GetString() ?? "").TakeWhile(char.IsDigit).ToArray()), out var spd) ; s.SpeedMhz = 0;
-                    if (stick.TryGetProperty("dimm_type",  out var ty)) s.Type = ty.GetString() ?? "";
-                    info.Sticks.Add(s);
+                    // Apple Silicon reports unified memory at the top level
+                    if (entry.TryGetProperty("SPMemoryDataType", out _) ||
+                        entry.TryGetProperty("_items", out var items))
+                    {
+                        // Nested sticks
+                        if (entry.TryGetProperty("_items", out var sticks) &&
+                            sticks.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var stick in sticks.EnumerateArray())
+                                info.Sticks.Add(ParseStick(stick));
+                        }
+                    }
+
+                    // Direct stick entries
+                    if (entry.TryGetProperty("dimm_type", out _) || entry.TryGetProperty("dimm_size", out _))
+                    {
+                        info.Sticks.Add(ParseStick(entry));
+                    }
+
+                    // Unified memory (Apple Silicon) — single entry with size at top level
+                    if (info.Sticks.Count == 0 && entry.TryGetProperty("_name", out _))
+                    {
+                        var s = new RamStick { CapacityMb = info.TotalMb };
+                        if (entry.TryGetProperty("dimm_type", out var ty)) s.Type = ty.GetString() ?? "";
+                        if (entry.TryGetProperty("dimm_manufacturer", out var mfr)) s.Manufacturer = mfr.GetString() ?? "";
+                        if (string.IsNullOrEmpty(s.Type))
+                        {
+                            // Try to detect type from SPMemoryDataType properties
+                            if (entry.TryGetProperty("dimm_speed", out var sp))
+                                s.Type = sp.GetString() ?? "";
+                        }
+                        info.Sticks.Add(s);
+                    }
                 }
+
+                // If we still have sticks with 0 capacity on unified memory, fill in the total
+                if (info.Sticks.Count == 1 && info.Sticks[0].CapacityMb == 0)
+                    info.Sticks[0].CapacityMb = info.TotalMb;
             }
+
+            if (info.Sticks.Count == 0)
+            {
+                // Fallback: use sysctl to determine type
+                var memType = Sysctl("hw.optional.arm64") == "1" ? "LPDDR5" : "DDR4";
+                info.Sticks.Add(new RamStick { CapacityMb = info.TotalMb, Type = memType, Manufacturer = "Apple" });
+            }
+
             return info;
+        }
+
+        private static RamStick ParseStick(JsonElement stick)
+        {
+            var s = new RamStick();
+            if (stick.TryGetProperty("dimm_size", out var sz))
+                s.CapacityMb = ParseSize(sz.GetString() ?? "");
+            if (stick.TryGetProperty("dimm_manufacturer", out var mfr))
+                s.Manufacturer = mfr.GetString() ?? "";
+            if (stick.TryGetProperty("dimm_type", out var ty))
+                s.Type = ty.GetString() ?? "";
+            if (stick.TryGetProperty("dimm_speed", out var sp))
+            {
+                var spStr = sp.GetString() ?? "";
+                var digits = new string(spStr.TakeWhile(char.IsDigit).ToArray());
+                if (int.TryParse(digits, out var spd))
+                    s.SpeedMhz = spd;
+            }
+            return s;
         }
 
         public List<StorageInfo> GetStorageInfo()
@@ -148,10 +228,24 @@ namespace PC_inspect_beta.Core.Platform
                         if (pd.TryGetProperty("device_name", out var dn)) s.Model = dn.GetString() ?? "";
                         if (pd.TryGetProperty("medium_type", out var mt)) s.Type  = mt.GetString() ?? "";
                     }
+
+                    // Filter out disk images, system volumes, and 0 GB volumes
+                    bool isDiskImage = (s.Model ?? "").Contains("Disk Image", StringComparison.OrdinalIgnoreCase);
+                    bool isSystemVol = (s.Mount ?? "").StartsWith("com.apple.", StringComparison.OrdinalIgnoreCase);
+                    if (isDiskImage || isSystemVol) continue;
+                    if (s.CapacityGb <= 0 && s.FreeGb <= 0) continue;
+
                     list.Add(s);
                 }
             }
-            return list;
+
+            // Deduplicate: keep only the entry with most free space per physical model
+            var deduped = list
+                .GroupBy(d => d.Model ?? "")
+                .Select(g => g.OrderByDescending(d => d.FreeGb).First())
+                .ToList();
+
+            return deduped.Count > 0 ? deduped : list;
         }
 
         public List<GpuInfo> GetGpuInfo()
@@ -181,7 +275,6 @@ namespace PC_inspect_beta.Core.Platform
                 return null;
 
             var info = new BatteryInfo();
-            // Example line: "-InternalBattery-0 (id=12345)	93%; charging; 1:23 remaining present: true"
             foreach (var token in pmset.Split(new[] { ';', '\t' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var t = token.Trim();
@@ -191,13 +284,15 @@ namespace PC_inspect_beta.Core.Platform
                     info.IsCharging = true;
             }
 
-            // Battery health from ioreg
+            // Battery health from ioreg — values are in mAh, not mWh on macOS
+            // We still store them in DesignCapacityMwh/FullChargeCapacityMwh fields
+            // as the health % calculation is what matters
             var ioreg = Run("/usr/sbin/ioreg", "-l -w0 -r -c AppleSmartBattery");
             foreach (var line in ioreg.Split('\n'))
             {
-                if (line.Contains("\"DesignCapacity\" ="))
+                if (line.Contains("\"DesignCapacity\" =") && !line.Contains("DesignCapacityLabel"))
                     info.DesignCapacityMwh = ParseInt(line);
-                if (line.Contains("\"MaxCapacity\" ="))
+                if (line.Contains("\"MaxCapacity\" =") && !line.Contains("MaxCapacityLabel"))
                     info.FullChargeCapacityMwh = ParseInt(line);
             }
             return info;
@@ -219,34 +314,100 @@ namespace PC_inspect_beta.Core.Platform
                         foreach (var mon in monitors.EnumerateArray())
                         {
                             var d = new DisplayInfo();
+                            // Try multiple resolution property names
+                            string res = "";
                             if (mon.TryGetProperty("_spdisplays_resolution", out var r))
+                                res = r.GetString() ?? "";
+                            else if (mon.TryGetProperty("spdisplays_resolution", out var r2))
+                                res = r2.GetString() ?? "";
+                            else if (mon.TryGetProperty("_spdisplays_pixels", out var r3))
+                                res = r3.GetString() ?? "";
+
+                            // Parse "3024 x 1964" or "3024x1964" or "3024 x 1964 @ 120 Hz"
+                            if (!string.IsNullOrEmpty(res))
                             {
-                                var res = r.GetString() ?? "";
-                                var parts = res.Split('x', ' ');
-                                if (parts.Length >= 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
+                                res = res.Replace(" ", "");
+                                var atIdx = res.IndexOf('@');
+                                if (atIdx > 0)
                                 {
-                                    d.Width = w;
-                                    d.Height = h;
+                                    var hzPart = res[(atIdx + 1)..].Replace("Hz", "").Trim();
+                                    if (int.TryParse(hzPart, out var hz))
+                                        d.RefreshHz = hz;
+                                    res = res[..atIdx];
+                                }
+                                var xIdx = res.IndexOfAny(new[] { 'x', 'X' });
+                                if (xIdx > 0)
+                                {
+                                    var wStr = new string(res[..xIdx].Where(char.IsDigit).ToArray());
+                                    var hStr = new string(res[(xIdx + 1)..].Where(char.IsDigit).ToArray());
+                                    if (int.TryParse(wStr, out var w)) d.Width = w;
+                                    if (int.TryParse(hStr, out var h)) d.Height = h;
                                 }
                             }
-                            list.Add(d);
+
+                            // Fallback: try to get refresh rate from separate property
+                            if (d.RefreshHz == 0 && mon.TryGetProperty("spdisplays_refresh", out var rr))
+                            {
+                                var rrStr = rr.GetString() ?? "";
+                                var digits = new string(rrStr.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+                                if (int.TryParse(digits, out var refreshHz))
+                                    d.RefreshHz = refreshHz;
+                            }
+
+                            if (d.Width > 0 && d.Height > 0)
+                                list.Add(d);
                         }
                     }
                 }
             }
+
+            // Fallback: use system_profiler SPDisplaysDataType text mode for resolution
+            if (list.Count == 0)
+            {
+                var text = Run("/usr/sbin/system_profiler", "SPDisplaysDataType");
+                foreach (var line in text.Split('\n'))
+                {
+                    if (line.Contains("Resolution:") || line.Contains("UI Looks like:"))
+                    {
+                        // "Resolution: 3024 x 1964 Retina"
+                        var parts = line.Split(':').LastOrDefault()?.Trim() ?? "";
+                        parts = parts.Replace("Retina", "").Replace("HiDPI", "").Trim();
+                        var xIdx = parts.IndexOfAny(new[] { 'x', 'X' });
+                        if (xIdx > 0)
+                        {
+                            var wStr = new string(parts[..xIdx].Trim().Where(char.IsDigit).ToArray());
+                            var hStr = new string(parts[(xIdx + 1)..].Trim().TakeWhile(c => char.IsDigit(c) || c == ' ').ToArray()).Trim();
+                            if (int.TryParse(wStr, out var w) && int.TryParse(hStr, out var h))
+                                list.Add(new DisplayInfo { Width = w, Height = h });
+                        }
+                    }
+                }
+            }
+
             return list;
         }
 
         public BiosInfo GetBiosInfo()
         {
-            var info = new BiosInfo
+            // Use system_profiler text mode for Boot ROM — JSON doesn't expose it easily
+            var hwText = Run("/usr/sbin/system_profiler", "SPHardwareDataType");
+            string bootRom = "";
+            foreach (var line in hwText.Split('\n'))
+            {
+                if (line.Contains("Boot ROM Version") || line.Contains("System Firmware"))
+                {
+                    bootRom = line.Split(':').LastOrDefault()?.Trim() ?? "";
+                    break;
+                }
+            }
+
+            return new BiosInfo
             {
                 Manufacturer     = "Apple Inc.",
-                Version          = Run("/usr/bin/system_profiler", "SPHardwareDataType | grep 'Boot ROM' | awk '{print $4}'"),
+                Version          = bootRom,
                 MotherboardModel = Sysctl("hw.model"),
-                SerialNumber     = Run("/usr/sbin/ioreg", "-l | grep IOPlatformSerialNumber | awk '{print $4}'").Trim('"')
+                SerialNumber     = ""
             };
-            return info;
         }
 
         public List<NetworkInfo> GetNetworkInfo()
@@ -277,8 +438,6 @@ namespace PC_inspect_beta.Core.Platform
             return list.Where(n => !n.Name.StartsWith("lo")).ToList();
         }
 
-        // ── Parse helpers ──────────────────────────────────────────────────
-
         private static long ParseSize(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return 0;
@@ -294,7 +453,8 @@ namespace PC_inspect_beta.Core.Platform
         {
             var idx = line.LastIndexOf('=');
             if (idx < 0) return 0;
-            return int.TryParse(line[(idx + 1)..].Trim(), out var n) ? n : 0;
+            var numStr = new string(line[(idx + 1)..].Trim().TakeWhile(char.IsDigit).ToArray());
+            return int.TryParse(numStr, out var n) ? n : 0;
         }
     }
 }
