@@ -84,6 +84,7 @@ jobs:
           chmod +x "$APP/Contents/MacOS/InspectifyScanner"
           rm -rf publish "PC inspect beta/bin" "PC inspect beta/obj"
           printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleExecutable</key><string>InspectifyScanner</string>' '  <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>' '  <key>CFBundleName</key><string>Inspectify Scanner</string>' '  <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>' '  <key>CFBundleShortVersionString</key><string>2.0.0</string>' '  <key>CFBundleVersion</key><string>2</string>' '  <key>CFBundlePackageType</key><string>APPL</string>' '  <key>LSMinimumSystemVersion</key><string>11.0</string>' '  <key>NSHighResolutionCapable</key><true/>' '</dict>' '</plist>' > "$APP/Contents/Info.plist"
+          codesign --force --deep -s - "$APP"
           xattr -cr "$APP"
           mkdir dmg-staging
           mv "$APP" dmg-staging/
@@ -139,6 +140,7 @@ jobs:
           chmod +x "$APP/Contents/MacOS/InspectifyScanner"
           rm -rf publish
           printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleExecutable</key><string>InspectifyScanner</string>' '  <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>' '  <key>CFBundleName</key><string>Inspectify Scanner</string>' '  <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>' '  <key>CFBundleShortVersionString</key><string>2.0.0</string>' '  <key>CFBundleVersion</key><string>2</string>' '  <key>CFBundlePackageType</key><string>APPL</string>' '  <key>LSMinimumSystemVersion</key><string>10.15</string>' '  <key>NSHighResolutionCapable</key><true/>' '</dict>' '</plist>' > "$APP/Contents/Info.plist"
+          codesign --force --deep -s - "$APP"
           xattr -cr "$APP"
           mkdir dmg-staging
           mv "$APP" dmg-staging/
@@ -241,12 +243,6 @@ jobs:
 
             > No .NET SDK or runtime required — everything is bundled inside each binary.
 
-            ### macOS Users — Important First-Run Steps
+            ### macOS Users — First-Run Note
 
-            macOS Gatekeeper will block the app since it is not signed with an Apple Developer certificate. To fix this, **run this one-time command after dragging to Applications**:
-
-            ```bash
-            xattr -cr /Applications/InspectifyScanner.app
-            ```
-
-            Or: **Right-click** the app → **Open** → click **Open** in the dialog. macOS remembers your choice after the first launch.
+            On first launch, macOS may show an "unidentified developer" warning. Simply **Right-click** the app → **Open** → click **Open** in the dialog. macOS remembers your choice — after that it opens normally with a double-click.
