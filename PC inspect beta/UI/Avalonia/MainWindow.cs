@@ -122,19 +122,11 @@ namespace PC_inspect_beta.UI.Avalonia
             actionStack.Children.Add(_postAdBtn);
 
             _kbTestBtn = MakeBtn("Keyboard Test", "#243447");
-            _kbTestBtn.Click += async (_, _) =>
-            {
-                var w = new KeyboardTestWindow();
-                await w.ShowDialog(this);
-            };
+            _kbTestBtn.Click += async (_, _) => await RunKeyboardTestAsync();
             actionStack.Children.Add(_kbTestBtn);
 
             _tpTestBtn = MakeBtn("Touchpad Test", "#243447");
-            _tpTestBtn.Click += async (_, _) =>
-            {
-                var w = new TouchpadTestWindow();
-                await w.ShowDialog(this);
-            };
+            _tpTestBtn.Click += async (_, _) => await RunTouchpadTestAsync();
             actionStack.Children.Add(_tpTestBtn);
 
             actionBar.Child = actionStack;
@@ -391,6 +383,13 @@ namespace PC_inspect_beta.UI.Avalonia
                 SetStatus("Scan complete ✔", "#10b981");
                 _exportPdfBtn.IsEnabled = true;
                 _postAdBtn.IsEnabled = true;
+                _output.Text = sb.ToString();
+                _scanBtn.IsEnabled = true;
+                _progress.IsVisible = false;
+
+                bool isLaptop = bat != null;
+                await PromptTestsAsync(isLaptop);
+                return;
             }
             catch (Exception ex)
             {
@@ -403,6 +402,154 @@ namespace PC_inspect_beta.UI.Avalonia
                 _output.Text = sb.ToString();
                 _scanBtn.IsEnabled = true;
                 _progress.IsVisible = false;
+            }
+        }
+
+        private async Task PromptTestsAsync(bool isLaptop)
+        {
+            var promptKb = await ShowConfirmAsync("Keyboard Test",
+                "Scan complete. Run the Keyboard Test now?");
+            if (promptKb)
+            {
+                await RunKeyboardTestAsync();
+
+                if (isLaptop)
+                {
+                    var promptTp = await ShowConfirmAsync("Touchpad Test",
+                        "Run the Touchpad Test now?");
+                    if (promptTp)
+                        await RunTouchpadTestAsync();
+                }
+            }
+
+            if (_lastScan != null)
+            {
+                var reportWin = new Window
+                {
+                    Title = "System Report",
+                    Width = 900,
+                    Height = 600,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Background = new SolidColorBrush(Color.Parse("#16212e"))
+                };
+                var reportBox = new TextBox
+                {
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.NoWrap,
+                    Text = _lastScan.ReportText,
+                    Background = new SolidColorBrush(Color.Parse("#0d1620")),
+                    Foreground = new SolidColorBrush(Color.Parse("#e2e8f0")),
+                    FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
+                    FontSize = 13,
+                    Padding = new Thickness(16)
+                };
+                reportWin.Content = reportBox;
+                await reportWin.ShowDialog(this);
+            }
+        }
+
+        private async Task<bool> ShowConfirmAsync(string title, string message)
+        {
+            var result = false;
+            var dlg = new Window
+            {
+                Title = title,
+                Width = 380,
+                Height = 160,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.Parse("#16212e"))
+            };
+            var stack = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+            stack.Children.Add(new TextBlock
+            {
+                Text = message,
+                Foreground = Brushes.White,
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap
+            });
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center };
+            var yesBtn = new Button
+            {
+                Content = "Yes",
+                Width = 80, Height = 34,
+                Background = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(6),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            yesBtn.Click += (_, _) => { result = true; dlg.Close(); };
+            var noBtn = new Button
+            {
+                Content = "No",
+                Width = 80, Height = 34,
+                Background = new SolidColorBrush(Color.Parse("#46464b")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(6),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            noBtn.Click += (_, _) => { result = false; dlg.Close(); };
+            btnRow.Children.Add(yesBtn);
+            btnRow.Children.Add(noBtn);
+            stack.Children.Add(btnRow);
+            dlg.Content = stack;
+            await dlg.ShowDialog(this);
+            return result;
+        }
+
+        private async Task RunKeyboardTestAsync()
+        {
+            var kt = new KeyboardTestWindow();
+            await kt.ShowDialog(this);
+
+            if (kt.Finished && _lastScan != null)
+            {
+                bool passed = kt.FailedKeys.Count == 0;
+                var sb = new StringBuilder(_lastScan.ReportText);
+                AppendSection(sb, "KEYBOARD TEST RESULT");
+                if (passed)
+                    sb.AppendLine("  Result      : ✔ PASSED — All keys detected");
+                else
+                {
+                    sb.AppendLine($"  Result      : ✖ ISSUES — {kt.FailedKeys.Count} key(s) not detected");
+                    sb.AppendLine($"  Failed Keys : {string.Join(", ", kt.FailedKeys)}");
+                }
+                _lastScan.ReportText = sb.ToString();
+                _lastScan.Metadata["keyboard_status"] = passed ? "Passed" : $"{kt.FailedKeys.Count} failed";
+                _output.Text = _lastScan.ReportText;
+
+                SetStatus(passed ? "Keyboard: PASSED ✔" : $"Keyboard: {kt.FailedKeys.Count} key(s) failed",
+                    passed ? "#10b981" : "#f59e0b");
+            }
+        }
+
+        private async Task RunTouchpadTestAsync()
+        {
+            bool extMouse = _lastScan?.Metadata.ContainsKey("external_mouse_detected") == true
+                         && _lastScan.Metadata["external_mouse_detected"] is true;
+
+            var tt = new TouchpadTestWindow(extMouse);
+            await tt.ShowDialog(this);
+
+            if (tt.Finished && !tt.Skipped && _lastScan != null)
+            {
+                bool passed = tt.LeftButtonPressed && tt.RightButtonPressed;
+                string result = passed
+                    ? "Both buttons PASSED ✔"
+                    : $"Partial — Left={tt.LeftButtonPressed}, Right={tt.RightButtonPressed}";
+
+                var sb = new StringBuilder(_lastScan.ReportText);
+                AppendSection(sb, "TOUCHPAD TEST RESULT");
+                sb.AppendLine($"  Result      : {result}");
+                if (extMouse)
+                    sb.AppendLine("  Note        : External mouse was connected during test.");
+                _lastScan.ReportText = sb.ToString();
+                _lastScan.Metadata["touchpad_status"] = result;
+                _output.Text = _lastScan.ReportText;
+
+                SetStatus(passed ? "Touchpad: PASSED ✔" : "Touchpad: PARTIAL",
+                    passed ? "#10b981" : "#f59e0b");
             }
         }
 

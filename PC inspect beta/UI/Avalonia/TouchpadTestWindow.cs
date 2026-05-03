@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -11,28 +9,28 @@ namespace PC_inspect_beta.UI.Avalonia
 {
     public class TouchpadTestWindow : Window
     {
-        private const int GridCols = 24;
-        private const int GridRows = 12;
+        public bool LeftButtonPressed { get; private set; }
+        public bool RightButtonPressed { get; private set; }
+        public bool Skipped { get; private set; }
+        public bool Finished { get; private set; }
 
-        private Canvas _canvas = null!;
-        private TextBlock _coverageText = null!;
-        private TextBlock _clickText = null!;
-        private readonly bool[,] _covered = new bool[GridCols, GridRows];
-        private readonly Rectangle[,] _cells = new Rectangle[GridCols, GridRows];
-        private int _leftClicks, _rightClicks;
-        private double _cellW, _cellH;
-        private bool _gridBuilt;
+        private Border _pnlLeft = null!, _pnlRight = null!;
+        private TextBlock _lblLeftBox = null!, _lblRightBox = null!;
+        private TextBlock _lblLeftStatus = null!, _lblRightStatus = null!;
 
-        private static readonly SolidColorBrush CoveredBrush = new(Color.Parse("#10b981"));
-        private static readonly SolidColorBrush UncoveredBrush = new(Color.Parse("#1e2a3a"));
-        private static readonly SolidColorBrush GridLineBrush = new(Color.Parse("#243447"));
+        private static readonly SolidColorBrush ColIdle = new(Color.Parse("#323238"));
+        private static readonly SolidColorBrush ColSuccess = new(Color.Parse("#10b981"));
+        private static readonly SolidColorBrush ColBorder = new(Color.Parse("#5a5a69"));
 
-        public TouchpadTestWindow()
+        private readonly bool _externalMouseDetected;
+
+        public TouchpadTestWindow(bool externalMouseDetected = false)
         {
+            _externalMouseDetected = externalMouseDetected;
             Title = "Touchpad Test";
-            Width = 900;
-            Height = 600;
-            CanResize = true;
+            Width = 560;
+            Height = 510;
+            CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
             BuildUi();
@@ -40,177 +38,237 @@ namespace PC_inspect_beta.UI.Avalonia
 
         private void BuildUi()
         {
-            var root = new DockPanel();
+            var root = new StackPanel { Spacing = 8, Margin = new Thickness(20) };
 
-            var header = new Border
+            root.Children.Add(new TextBlock
             {
-                Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
-                Padding = new Thickness(20, 14),
-                BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
-                BorderThickness = new Thickness(0, 0, 0, 1)
-            };
-            DockPanel.SetDock(header, Dock.Top);
-            var headStack = new StackPanel { Spacing = 4 };
-            headStack.Children.Add(new TextBlock
-            {
-                Text = "Touchpad Test",
+                Text = "Touchpad Button Test",
                 FontSize = 20,
                 FontWeight = FontWeight.Bold,
-                Foreground = Brushes.White
+                Foreground = new SolidColorBrush(Color.Parse("#22d3ee")),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 10, 0, 0)
             });
-            headStack.Children.Add(new TextBlock
-            {
-                Text = "Move your finger across every part of the touchpad. Cells turn green where the cursor passed.",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Color.Parse("#94a3b8"))
-            });
-            header.Child = headStack;
-            root.Children.Add(header);
 
-            var footer = new Border
+            if (_externalMouseDetected)
             {
-                Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
-                Padding = new Thickness(20, 12),
-                BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
-                BorderThickness = new Thickness(0, 1, 0, 0)
-            };
-            DockPanel.SetDock(footer, Dock.Bottom);
+                root.Children.Add(new Border
+                {
+                    Background = new SolidColorBrush(Color.Parse("#322800")),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(10, 8),
+                    Margin = new Thickness(0, 8, 0, 0),
+                    Child = new TextBlock
+                    {
+                        Text = "⚠  External mouse connected. Disconnect it for accurate results.",
+                        FontSize = 11,
+                        FontWeight = FontWeight.Bold,
+                        Foreground = new SolidColorBrush(Color.Parse("#f59e0b")),
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    }
+                });
+            }
 
-            var footStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 24 };
-            _coverageText = new TextBlock
+            root.Children.Add(new TextBlock
             {
-                Text = "Coverage: 0%",
-                Foreground = new SolidColorBrush(Color.Parse("#5ea0ff")),
-                FontSize = 13,
-                FontWeight = FontWeight.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            footStack.Children.Add(_coverageText);
-
-            _clickText = new TextBlock
-            {
-                Text = "Left clicks: 0  •  Right clicks: 0",
+                Text = "Press the LEFT then RIGHT physical touchpad button.\nOnly touchpad clicks are counted — mouse clicks are ignored.",
+                FontSize = 11,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
-                FontSize = 13,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            footStack.Children.Add(_clickText);
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 8, 0, 16)
+            });
 
-            var resetBtn = new Button
+            var boxRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 60, HorizontalAlignment = HorizontalAlignment.Center };
+
+            _lblLeftBox = new TextBlock
             {
-                Content = "Reset",
-                Background = new SolidColorBrush(Color.Parse("#243447")),
+                Text = "LEFT\nButton",
+                FontSize = 15,
+                FontWeight = FontWeight.Bold,
                 Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center
+            };
+            _pnlLeft = new Border
+            {
+                Width = 200,
+                Height = 130,
+                Background = ColIdle,
+                BorderBrush = ColBorder,
+                BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(20, 8),
-                HorizontalAlignment = HorizontalAlignment.Right
+                Child = _lblLeftBox
             };
-            resetBtn.Click += (_, _) => Reset();
-            DockPanel.SetDock(resetBtn, Dock.Right);
-            footer.Child = new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("*, Auto"),
-                Children = { footStack, AddTo(resetBtn, col: 1) }
-            };
-            root.Children.Add(footer);
+            _pnlLeft.PointerPressed += OnLeftPressed;
 
-            _canvas = new Canvas
+            _lblRightBox = new TextBlock
             {
-                Background = new SolidColorBrush(Color.Parse("#0d1620"))
+                Text = "RIGHT\nButton",
+                FontSize = 15,
+                FontWeight = FontWeight.Bold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center
             };
-            _canvas.PointerMoved += OnPointerMoved;
-            _canvas.PointerPressed += OnPointerPressed;
-            root.Children.Add(_canvas);
+            _pnlRight = new Border
+            {
+                Width = 200,
+                Height = 130,
+                Background = ColIdle,
+                BorderBrush = ColBorder,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(8),
+                Child = _lblRightBox
+            };
+            _pnlRight.PointerPressed += OnRightPressed;
+
+            boxRow.Children.Add(_pnlLeft);
+            boxRow.Children.Add(_pnlRight);
+            root.Children.Add(boxRow);
+
+            var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 60, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+            _lblLeftStatus = new TextBlock
+            {
+                Text = "Waiting for press…",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+                Width = 200,
+                TextAlignment = TextAlignment.Center
+            };
+            _lblRightStatus = new TextBlock
+            {
+                Text = "Waiting for press…",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+                Width = 200,
+                TextAlignment = TextAlignment.Center
+            };
+            statusRow.Children.Add(_lblLeftStatus);
+            statusRow.Children.Add(_lblRightStatus);
+            root.Children.Add(statusRow);
+
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 60, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 24, 0, 0) };
+
+            var btnDone = new Button
+            {
+                Content = "Mark as Done",
+                Width = 200,
+                Height = 40,
+                Background = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.SemiBold,
+                CornerRadius = new CornerRadius(6),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            btnDone.Click += (_, _) => FinishTest();
+
+            var btnSkip = new Button
+            {
+                Content = "Skip",
+                Width = 200,
+                Height = 40,
+                Background = new SolidColorBrush(Color.Parse("#46464b")),
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.SemiBold,
+                CornerRadius = new CornerRadius(6),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            btnSkip.Click += (_, _) => { Skipped = true; Close(); };
+
+            btnRow.Children.Add(btnDone);
+            btnRow.Children.Add(btnSkip);
+            root.Children.Add(btnRow);
 
             Content = root;
+        }
 
-            // Build the grid once the canvas has a real size
-            _canvas.PropertyChanged += (_, e) =>
+        private void OnLeftPressed(object? sender, PointerPressedEventArgs e)
+        {
+            var props = e.GetCurrentPoint(_pnlLeft).Properties;
+            if (props.IsLeftButtonPressed && !LeftButtonPressed)
             {
-                if (e.Property == BoundsProperty)
-                    RebuildGrid();
+                LeftButtonPressed = true;
+                _pnlLeft.Background = ColSuccess;
+                _lblLeftBox.Text = "LEFT\n✔ Pressed!";
+                _lblLeftStatus.Text = "✔ Detected";
+                _lblLeftStatus.Foreground = ColSuccess;
+                CheckBothPressed();
+            }
+        }
+
+        private void OnRightPressed(object? sender, PointerPressedEventArgs e)
+        {
+            var props = e.GetCurrentPoint(_pnlRight).Properties;
+            if (props.IsRightButtonPressed && !RightButtonPressed)
+            {
+                RightButtonPressed = true;
+                _pnlRight.Background = ColSuccess;
+                _lblRightBox.Text = "RIGHT\n✔ Pressed!";
+                _lblRightStatus.Text = "✔ Detected";
+                _lblRightStatus.Foreground = ColSuccess;
+                CheckBothPressed();
+            }
+        }
+
+        private void CheckBothPressed()
+        {
+            if (LeftButtonPressed && RightButtonPressed)
+            {
+                ShowResult("Both touchpad buttons detected!\nTouchpad PASSED ✔", true);
+            }
+        }
+
+        private void FinishTest()
+        {
+            Finished = true;
+            bool passed = LeftButtonPressed && RightButtonPressed;
+            string msg = passed
+                ? "Both buttons PASSED ✔"
+                : $"Partial — Left: {(LeftButtonPressed ? "OK" : "Not pressed")}  Right: {(RightButtonPressed ? "OK" : "Not pressed")}";
+            ShowResult(msg, passed);
+        }
+
+        private void ShowResult(string msg, bool passed)
+        {
+            Finished = true;
+            var msgWindow = new Window
+            {
+                Title = "Touchpad Result",
+                Width = 400,
+                Height = 160,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.Parse("#16212e"))
             };
-        }
 
-        private static Control AddTo(Control c, int col)
-        {
-            Grid.SetColumn(c, col);
-            return c;
-        }
-
-        private void RebuildGrid()
-        {
-            if (_canvas.Bounds.Width <= 0 || _canvas.Bounds.Height <= 0) return;
-
-            _cellW = _canvas.Bounds.Width / GridCols;
-            _cellH = _canvas.Bounds.Height / GridRows;
-
-            _canvas.Children.Clear();
-            for (int x = 0; x < GridCols; x++)
+            var stack = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+            stack.Children.Add(new TextBlock
             {
-                for (int y = 0; y < GridRows; y++)
-                {
-                    var cell = new Rectangle
-                    {
-                        Width = _cellW - 1,
-                        Height = _cellH - 1,
-                        Fill = _covered[x, y] ? CoveredBrush : UncoveredBrush,
-                        Stroke = GridLineBrush,
-                        StrokeThickness = 0.5
-                    };
-                    Canvas.SetLeft(cell, x * _cellW);
-                    Canvas.SetTop(cell, y * _cellH);
-                    _canvas.Children.Add(cell);
-                    _cells[x, y] = cell;
-                }
-            }
-            _gridBuilt = true;
-        }
-
-        private void OnPointerMoved(object? sender, PointerEventArgs e)
-        {
-            if (!_gridBuilt || _cellW <= 0 || _cellH <= 0) return;
-
-            var pt = e.GetPosition(_canvas);
-            int gx = Math.Clamp((int)(pt.X / _cellW), 0, GridCols - 1);
-            int gy = Math.Clamp((int)(pt.Y / _cellH), 0, GridRows - 1);
-
-            if (!_covered[gx, gy])
+                Text = msg,
+                Foreground = passed
+                    ? new SolidColorBrush(Color.Parse("#10b981"))
+                    : new SolidColorBrush(Color.Parse("#f59e0b")),
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap
+            });
+            var okBtn = new Button
             {
-                _covered[gx, gy] = true;
-                _cells[gx, gy].Fill = CoveredBrush;
-                UpdateCoverage();
-            }
-        }
-
-        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            var props = e.GetCurrentPoint(_canvas).Properties;
-            if (props.IsLeftButtonPressed) _leftClicks++;
-            if (props.IsRightButtonPressed) _rightClicks++;
-            _clickText.Text = $"Left clicks: {_leftClicks}  •  Right clicks: {_rightClicks}";
-        }
-
-        private void UpdateCoverage()
-        {
-            int total = GridCols * GridRows;
-            int hit = 0;
-            for (int x = 0; x < GridCols; x++)
-                for (int y = 0; y < GridRows; y++)
-                    if (_covered[x, y]) hit++;
-            _coverageText.Text = $"Coverage: {hit * 100 / total}%";
-        }
-
-        private void Reset()
-        {
-            for (int x = 0; x < GridCols; x++)
-                for (int y = 0; y < GridRows; y++)
-                    _covered[x, y] = false;
-            _leftClicks = _rightClicks = 0;
-            _gridBuilt = false;
-            RebuildGrid();
-            UpdateCoverage();
-            _clickText.Text = "Left clicks: 0  •  Right clicks: 0";
+                Content = "OK",
+                Background = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Foreground = Brushes.White,
+                Width = 100,
+                Height = 36,
+                CornerRadius = new CornerRadius(6),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            okBtn.Click += (_, _) => { msgWindow.Close(); Close(); };
+            stack.Children.Add(okBtn);
+            msgWindow.Content = stack;
+            msgWindow.ShowDialog(this);
         }
     }
 }
