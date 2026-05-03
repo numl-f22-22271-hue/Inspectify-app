@@ -73,16 +73,30 @@ namespace PC_inspect_beta.UI.Avalonia
             form.Children.Add(MakeLabel("Username"));
             _txtUser = MakeInput(); form.Children.Add(_txtUser);
 
-            form.Children.Add(MakeLabel("Password (min 6 chars)"));
+            form.Children.Add(MakeLabel("Password"));
             _txtPass = MakeInput(isPassword: true); form.Children.Add(_txtPass);
+            form.Children.Add(new TextBlock
+            {
+                Text = "Must be at least 6 characters",
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Color.Parse("#64748b")),
+                Margin = new Thickness(0, -8, 0, 0)
+            });
 
-            form.Children.Add(MakeLabel("Email"));
+            form.Children.Add(MakeLabel("Email / Gmail"));
             _txtEmail = MakeInput(); form.Children.Add(_txtEmail);
 
-            form.Children.Add(MakeLabel("Phone (e.g., 03xx-xxxxxxx)"));
+            form.Children.Add(MakeLabel("Phone Number"));
             _txtPhone = MakeInput(); form.Children.Add(_txtPhone);
+            form.Children.Add(new TextBlock
+            {
+                Text = "Format: 03xx-xxxxxxx",
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Color.Parse("#64748b")),
+                Margin = new Thickness(0, -8, 0, 0)
+            });
 
-            form.Children.Add(MakeLabel("Date of Birth"));
+            form.Children.Add(MakeLabel("Date of Birth (DD/MM/YYYY)"));
             _dtpBirth = new DatePicker
             {
                 MaxYear = DateTimeOffset.Now.AddYears(-10),

@@ -65,7 +65,7 @@ namespace PC_inspect_beta.UI.Avalonia
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = AppConfig.Tagline,
+                Text = "Diagnose · Verify · Sell",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
                 Margin = new Thickness(0, 4, 0, 0)
@@ -235,7 +235,7 @@ namespace PC_inspect_beta.UI.Avalonia
             _exportPdfBtn.IsEnabled = false;
             _postAdBtn.IsEnabled = false;
             _progress.IsVisible = true;
-            SetStatus("Scanning hardware...", "#f59e0b");
+            SetStatus("Starting scan…", "#f59e0b");
             _output.Text = "";
 
             var sb = new StringBuilder();
@@ -252,7 +252,7 @@ namespace PC_inspect_beta.UI.Avalonia
             {
                 var scanner = await Task.Run(() => PlatformDetector.CreateScanner());
 
-                await UpdateAsync("Detecting CPU...", sb);
+                await UpdateAsync("Detecting CPU…", sb);
                 var cpu = await Task.Run(scanner.GetCpuInfo);
                 AppendSection(sb, "CPU");
                 sb.AppendLine($"  Model       : {cpu.Name}");
@@ -264,7 +264,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["cpu_cores"] = cpu.Cores;
                 result.Metadata["cpu_threads"] = cpu.Threads;
 
-                await UpdateAsync("Reading RAM...", sb);
+                await UpdateAsync("Reading RAM…", sb);
                 var ram = await Task.Run(scanner.GetRamInfo);
                 AppendSection(sb, "RAM");
                 sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ram.TotalMb} MB)");
@@ -274,7 +274,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine();
                 result.Metadata["ram_total_gb"] = ram.TotalMb / 1024;
 
-                await UpdateAsync("Scanning storage...", sb);
+                await UpdateAsync("Scanning storage…", sb);
                 var storage = await Task.Run(scanner.GetStorageInfo);
                 AppendSection(sb, "STORAGE");
                 long totalStorage = 0;
@@ -287,7 +287,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["storage_total_gb"] = totalStorage;
                 result.Metadata["storage_type"] = storage.FirstOrDefault()?.Type ?? "";
 
-                await UpdateAsync("Checking GPU...", sb);
+                await UpdateAsync("Checking GPU…", sb);
                 var gpus = await Task.Run(scanner.GetGpuInfo);
                 AppendSection(sb, "GPU");
                 foreach (var g in gpus)
@@ -295,7 +295,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine();
                 result.Metadata["gpu_name"] = gpus.FirstOrDefault()?.Name ?? "";
 
-                await UpdateAsync("Reading battery info...", sb);
+                await UpdateAsync("Reading battery info…", sb);
                 var bat = await Task.Run(scanner.GetBatteryInfo);
                 AppendSection(sb, "BATTERY");
                 if (bat == null)
@@ -310,29 +310,30 @@ namespace PC_inspect_beta.UI.Avalonia
                 }
                 sb.AppendLine();
 
-                await UpdateAsync("Scanning displays...", sb);
+                await UpdateAsync("Scanning displays…", sb);
                 var displays = await Task.Run(scanner.GetDisplayInfo);
                 AppendSection(sb, "DISPLAY");
                 foreach (var d in displays)
                     sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
                 sb.AppendLine();
 
-                await UpdateAsync("Reading BIOS info...", sb);
+                await UpdateAsync("Reading BIOS info…", sb);
                 var bios = await Task.Run(scanner.GetBiosInfo);
                 AppendSection(sb, "BIOS / MOTHERBOARD");
                 sb.AppendLine($"  Manufacturer: {bios.Manufacturer}");
                 sb.AppendLine($"  Version     : {bios.Version}");
                 sb.AppendLine($"  Model       : {bios.MotherboardModel}");
                 sb.AppendLine();
+                result.Metadata["motherboard"] = bios.MotherboardModel;
 
-                await UpdateAsync("Scanning network cards...", sb);
+                await UpdateAsync("Scanning network cards…", sb);
                 var nets = await Task.Run(scanner.GetNetworkInfo);
                 AppendSection(sb, "NETWORK");
                 foreach (var n in nets)
                     sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
                 sb.AppendLine();
 
-                await UpdateAsync("Scanning OS...", sb);
+                await UpdateAsync("Scanning OS…", sb);
                 var os = await Task.Run(scanner.GetOsInfo);
                 AppendSection(sb, "OS & POWER");
                 sb.AppendLine($"  Name        : {os.Name}");
@@ -343,8 +344,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["os_version"] = os.Version;
                 result.Metadata["architecture"] = os.Architecture;
 
-                // Stress tests
-                await UpdateAsync("RAM stress test...", sb);
+                await UpdateAsync("RAM stress test…", sb);
                 var ramStress = await Task.Run(StressTestEngine.RunRamStress);
                 AppendSection(sb, "STRESS TEST — RAM");
                 sb.AppendLine($"  {ramStress.Summary}");
@@ -354,7 +354,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["stress_ram"] = ramStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("CPU stress test...", sb);
+                await UpdateAsync("CPU stress test…", sb);
                 var cpuStress = await Task.Run(StressTestEngine.RunCpuStress);
                 AppendSection(sb, "STRESS TEST — CPU");
                 sb.AppendLine($"  {cpuStress.Summary}");
@@ -362,7 +362,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["stress_cpu"] = cpuStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("GPU/compute stress test...", sb);
+                await UpdateAsync("GPU/compute stress test…", sb);
                 var gpuStress = await Task.Run(StressTestEngine.RunGpuStress);
                 AppendSection(sb, "STRESS TEST — GPU/COMPUTE");
                 sb.AppendLine($"  {gpuStress.Summary}");
@@ -370,7 +370,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["stress_gpu"] = gpuStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("Storage R/W speed test...", sb);
+                await UpdateAsync("Storage R/W speed test…", sb);
                 var storageStress = await Task.Run(StressTestEngine.RunStorageStress);
                 AppendSection(sb, "STRESS TEST — STORAGE");
                 foreach (var s in storageStress)
@@ -388,7 +388,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 _ = Task.Run(() => PricePredictor.EnsureTrained());
 #endif
 
-                SetStatus("Scan complete.", "#10b981");
+                SetStatus("Scan complete ✔", "#10b981");
                 _exportPdfBtn.IsEnabled = true;
                 _postAdBtn.IsEnabled = true;
             }
