@@ -11,14 +11,15 @@ namespace PC_inspect_beta.UI.Avalonia
     public class ForgotPasswordWindow : Window
     {
         private TextBox _txtUser = null!, _txtEmail = null!, _txtNewPass = null!;
+        private DatePicker _dtpBirth = null!;
         private TextBlock _errorText = null!;
         private Button _btnReset = null!;
 
         public ForgotPasswordWindow()
         {
-            Title = "Forgot Password";
+            Title = "Reset Password";
             Width = 440;
-            Height = 540;
+            Height = 660;
             CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
@@ -48,7 +49,7 @@ namespace PC_inspect_beta.UI.Avalonia
 
             var hs = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             hs.Children.Add(new TextBlock { Text = "Reset Password", FontSize = 22, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center });
-            hs.Children.Add(new TextBlock { Text = "Verify identity to set a new password", FontSize = 13, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
+            hs.Children.Add(new TextBlock { Text = "Verify your details to update your password", FontSize = 13, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
             header.Child = hs;
             root.Children.Add(header);
 
@@ -57,10 +58,22 @@ namespace PC_inspect_beta.UI.Avalonia
             form.Children.Add(MakeLabel("Username"));
             _txtUser = MakeInput(); form.Children.Add(_txtUser);
 
-            form.Children.Add(MakeLabel("Email (must match account)"));
+            form.Children.Add(MakeLabel("Verify Email"));
             _txtEmail = MakeInput(); form.Children.Add(_txtEmail);
 
-            form.Children.Add(MakeLabel("New Password (min 6 chars)"));
+            form.Children.Add(MakeLabel("Verify Date of Birth"));
+            _dtpBirth = new DatePicker
+            {
+                Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
+                Foreground = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Height = 44
+            };
+            form.Children.Add(_dtpBirth);
+
+            form.Children.Add(MakeLabel("New Password"));
             _txtNewPass = MakeInput(isPassword: true); form.Children.Add(_txtNewPass);
 
             _errorText = new TextBlock
@@ -74,7 +87,7 @@ namespace PC_inspect_beta.UI.Avalonia
 
             _btnReset = new Button
             {
-                Content = "Reset Password",
+                Content = "Update Password",
                 Background = new SolidColorBrush(Color.Parse("#f59e0b")),
                 Foreground = Brushes.White,
                 FontWeight = FontWeight.SemiBold,
@@ -99,28 +112,37 @@ namespace PC_inspect_beta.UI.Avalonia
             var user = (_txtUser.Text ?? "").Trim();
             var email = (_txtEmail.Text ?? "").Trim();
             var newPass = _txtNewPass.Text ?? "";
+            var dob = _dtpBirth.SelectedDate?.ToString("yyyy-MM-dd") ?? "";
 
             if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(email))
-            { ShowError("Username and email required."); return; }
+            { ShowError("Username and email are required."); return; }
+            if (string.IsNullOrEmpty(dob))
+            { ShowError("Please select your date of birth."); return; }
             if (newPass.Length < 6)
             { ShowError("Password must be at least 6 characters."); return; }
 
             _btnReset.IsEnabled = false;
-            _btnReset.Content = "Verifying…";
+            _btnReset.Content = "Verifying...";
 
             try
             {
                 var u = await DbHelper.GetUser(user);
-                if (u == null)
-                { ShowError("Account not found."); return; }
-                if ((u["email"]?.ToString() ?? "").Trim().ToLower() != email.ToLower())
-                { ShowError("Email does not match account."); return; }
+                if (u != null &&
+                    u["email"]?.ToString() == email &&
+                    u["dob"]?.ToString() == dob)
+                {
+                    u["password"] = newPass;
+                    await DbHelper.SaveUser(user, u);
 
-                u["password"] = newPass;
-                await DbHelper.SaveUser(user, u);
-
-                ShowError("Password updated. You can now sign in with the new password.");
-                _errorText.Foreground = new SolidColorBrush(Color.Parse("#10b981"));
+                    ShowError("Password updated!");
+                    _errorText.Foreground = new SolidColorBrush(Color.Parse("#10b981"));
+                    await Task.Delay(1200);
+                    Close();
+                }
+                else
+                {
+                    ShowError("Verification failed. Check username, email, and date of birth.");
+                }
             }
             catch (Exception ex)
             {
@@ -129,7 +151,7 @@ namespace PC_inspect_beta.UI.Avalonia
             finally
             {
                 _btnReset.IsEnabled = true;
-                _btnReset.Content = "Reset Password";
+                _btnReset.Content = "Update Password";
             }
         }
 

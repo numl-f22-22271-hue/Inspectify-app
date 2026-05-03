@@ -5,10 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using PC_inspect_beta.Core;
 using PC_inspect_beta.Core.Models;
@@ -16,36 +14,33 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 using SixImage = SixLabors.ImageSharp.Image;
-using AvImage = Avalonia.Controls.Image;
 using Color = Avalonia.Media.Color;
 
 namespace PC_inspect_beta.UI.Avalonia
 {
-    /// <summary>
-    /// Cross-platform ad post window. Lets the user describe their device,
-    /// attach photos, and publish the listing to MongoDB.
-    /// </summary>
     public class AdPostWindow : Window
     {
         private readonly string _username;
         private readonly ScanResult _scan;
+        private readonly List<string> _selectedFiles = new();
 
-        private TextBox _title = null!, _description = null!, _price = null!, _location = null!;
-        private ComboBox _condition = null!;
-        private TextBlock _priceHint = null!;
-        private StackPanel _imagePreview = null!;
-        private TextBlock _statusText = null!;
-        private Button _btnSubmit = null!, _btnAddImages = null!;
-        private List<string> _imagePaths = new();
+        private TextBox _txtTitle = null!, _txtPrice = null!, _txtDesc = null!;
+        private NumericUpDown _numYearsUsed = null!;
+        private ComboBox _cmbCondition = null!;
+        private TextBlock _lblFileCount = null!, _statusText = null!;
+        private ProgressBar _pBar = null!;
+        private Button _btnPost = null!, _btnPhoto = null!;
+
+        private const int MAX_PHOTOS = 5;
 
         public AdPostWindow(string username, ScanResult scan)
         {
             _username = username;
             _scan = scan;
-
-            Title = "Post Ad";
-            Width = 640;
-            Height = 800;
+            Title = "Create Marketplace Listing";
+            Width = 560;
+            Height = 860;
+            CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
             BuildUi();
@@ -58,94 +53,115 @@ namespace PC_inspect_beta.UI.Avalonia
             // Header
             var header = new Border
             {
-                Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
-                Padding = new Thickness(20, 16),
-                BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
-                BorderThickness = new Thickness(0, 0, 0, 1)
+                Background = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new GradientStop(Color.Parse("#2b72d4"), 0),
+                        new GradientStop(Color.Parse("#5ea0ff"), 1)
+                    }
+                },
+                Height = 110,
+                Padding = new Thickness(20, 20)
             };
             DockPanel.SetDock(header, Dock.Top);
 
-            var hs = new StackPanel();
+            var hs = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
             hs.Children.Add(new TextBlock
             {
-                Text = "Post Your Listing",
+                Text = "Sell Your Device",
                 FontSize = 20,
                 FontWeight = FontWeight.Bold,
-                Foreground = Brushes.White
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center
             });
             hs.Children.Add(new TextBlock
             {
-                Text = $"Signed in as @{_username}",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+                Text = "List your scanned device on Inspectify LapStore",
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.Parse("#e6e6fa")),
+                HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 4, 0, 0)
             });
             header.Child = hs;
             root.Children.Add(header);
 
-            // Status bar (bottom)
+            // Bottom: submit button + progress + status
+            var bottomPanel = new StackPanel { Margin = new Thickness(20, 8, 20, 12) };
+            DockPanel.SetDock(bottomPanel, Dock.Bottom);
+
             _statusText = new TextBlock
             {
                 Text = "",
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
                 FontSize = 12,
-                Margin = new Thickness(20, 12),
-                TextWrapping = TextWrapping.Wrap
+                Margin = new Thickness(0, 0, 0, 4)
             };
-            DockPanel.SetDock(_statusText, Dock.Bottom);
-            root.Children.Add(_statusText);
+            bottomPanel.Children.Add(_statusText);
 
-            // Submit button (bottom)
-            _btnSubmit = new Button
+            _pBar = new ProgressBar
+            {
+                Height = 6,
+                Minimum = 0,
+                Maximum = 100,
+                IsVisible = false,
+                Foreground = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            bottomPanel.Children.Add(_pBar);
+
+            _btnPost = new Button
             {
                 Content = "Publish Listing",
-                Background = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Background = new SolidColorBrush(Color.Parse("#10b981")),
                 Foreground = Brushes.White,
                 FontWeight = FontWeight.SemiBold,
                 FontSize = 14,
-                Height = 48,
+                Height = 52,
                 CornerRadius = new CornerRadius(8),
-                Margin = new Thickness(20, 0, 20, 12),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Center
             };
-            _btnSubmit.Click += async (_, _) => await PublishAsync();
-            DockPanel.SetDock(_btnSubmit, Dock.Bottom);
-            root.Children.Add(_btnSubmit);
+            _btnPost.Click += async (_, _) => await OnPublishAsync();
+            bottomPanel.Children.Add(_btnPost);
 
-            // Form (scrollable)
-            var scroll = new ScrollViewer { Padding = new Thickness(20) };
-            var form = new StackPanel { Spacing = 12 };
+            root.Children.Add(bottomPanel);
 
-            form.Children.Add(MakeLabel("Title"));
-            _title = MakeInput("e.g., Dell XPS 15 — i7 12th gen — 16GB / 512GB SSD");
-            form.Children.Add(_title);
+            // Scrollable form
+            var scroll = new ScrollViewer { Padding = new Thickness(20, 16) };
+            var form = new StackPanel { Spacing = 10 };
 
-            form.Children.Add(MakeLabel("Description"));
-            _description = MakeInput("Describe condition, included accessories, reason for sale...", multiline: true);
-            form.Children.Add(_description);
+            // Title (auto-filled)
+            form.Children.Add(MakeLabel("Product Title"));
+            _txtTitle = MakeInput();
+#if WINDOWS
+            _txtTitle.Text = PricePredictor.BuildProductTitle(_scan?.Metadata);
+#else
+            _txtTitle.Text = BuildFallbackTitle(_scan?.Metadata);
+#endif
+            form.Children.Add(_txtTitle);
 
-            form.Children.Add(MakeLabel("Asking Price (PKR)"));
-            _price = MakeInput("e.g., 150000");
-            form.Children.Add(_price);
+            // Price
+            form.Children.Add(MakeLabel("Price (PKR)"));
+            _txtPrice = MakeInput();
+            form.Children.Add(_txtPrice);
 
-            // Predicted price hint (shown under the price field in brackets)
-            _priceHint = new TextBlock
+            // Condition + Years Used side by side
+            var condRow = new Grid
             {
-                Text = "",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Color.Parse("#5ea0ff")),
-                FontStyle = FontStyle.Italic,
+                ColumnDefinitions = new ColumnDefinitions("*, 12, *"),
                 Margin = new Thickness(0, 4, 0, 0)
             };
-            form.Children.Add(_priceHint);
 
-            form.Children.Add(MakeLabel("Location"));
-            _location = MakeInput("e.g., Karachi, Pakistan");
-            form.Children.Add(_location);
-
-            form.Children.Add(MakeLabel("Condition"));
-            _condition = new ComboBox
+            var condStack = new StackPanel();
+            condStack.Children.Add(MakeLabel("Condition"));
+            _cmbCondition = new ComboBox
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
                 Foreground = Brushes.White,
@@ -155,179 +171,223 @@ namespace PC_inspect_beta.UI.Avalonia
                 Padding = new Thickness(12, 8),
                 Height = 44,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ItemsSource = new[] { "10/10 (Like new)", "9/10 (Excellent)", "8/10 (Very good)", "7/10 (Good)", "6/10 (Fair)" },
-                SelectedIndex = 1
+                ItemsSource = new[] { "New", "Like New", "Used", "For Parts" },
+                SelectedIndex = 0
             };
-            _condition.SelectionChanged += (_, _) => UpdatePredictedPrice();
-            form.Children.Add(_condition);
-
-            // Initial prediction based on current scan + default condition
-            UpdatePredictedPrice();
-
-            form.Children.Add(MakeLabel("Photos (up to 8 images)"));
-
-            _btnAddImages = new Button
+            _cmbCondition.SelectionChanged += (_, _) =>
             {
-                Content = "+ Add Photos",
-                Background = new SolidColorBrush(Color.Parse("#243447")),
+                if (_cmbCondition.SelectedItem?.ToString() == "New")
+                    _numYearsUsed.Value = 0;
+            };
+            condStack.Children.Add(_cmbCondition);
+            Grid.SetColumn(condStack, 0);
+            condRow.Children.Add(condStack);
+
+            var yearsStack = new StackPanel();
+            yearsStack.Children.Add(MakeLabel("Years Used"));
+            _numYearsUsed = new NumericUpDown
+            {
+                Minimum = 0,
+                Maximum = 20,
+                Value = 0,
+                Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
                 Foreground = Brushes.White,
-                BorderBrush = new SolidColorBrush(Color.Parse("#2b72d4")),
+                BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
                 BorderThickness = new Thickness(1),
+                Height = 44,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            yearsStack.Children.Add(_numYearsUsed);
+            Grid.SetColumn(yearsStack, 2);
+            condRow.Children.Add(yearsStack);
+
+            form.Children.Add(condRow);
+
+            // Description
+            form.Children.Add(MakeLabel("Description"));
+            _txtDesc = MakeInput(multiline: true);
+            form.Children.Add(_txtDesc);
+
+            // Detected specs (read-only)
+            string specs = BuildSpecSnippet();
+            if (!string.IsNullOrEmpty(specs))
+            {
+                form.Children.Add(MakeLabel("Detected Specs (from scan)", accent: true));
+                var specsBox = new TextBox
+                {
+                    Text = specs,
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    Height = 80,
+                    Background = new SolidColorBrush(Color.Parse("#0d1620")),
+                    Foreground = new SolidColorBrush(Color.Parse("#e2e8f0")),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(12, 10),
+                    FontSize = 12,
+                    FontFamily = new FontFamily("JetBrains Mono, Menlo, Consolas, monospace")
+                };
+                form.Children.Add(specsBox);
+            }
+
+            // Divider
+            form.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.Parse("#243447")),
+                Margin = new Thickness(0, 6)
+            });
+
+            // Photo selector
+            form.Children.Add(MakeLabel($"Photos  (max {MAX_PHOTOS} · auto-compressed to 100 KB)"));
+
+            var photoRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            _btnPhoto = new Button
+            {
+                Content = "Select Photos",
+                Background = new SolidColorBrush(Color.Parse("#2b72d4")),
+                Foreground = Brushes.White,
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(16, 10),
-                Height = 44,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center
+                Height = 40
             };
-            _btnAddImages.Click += async (_, _) => await PickImagesAsync();
-            form.Children.Add(_btnAddImages);
+            _btnPhoto.Click += async (_, _) => await OnSelectPhotosAsync();
+            photoRow.Children.Add(_btnPhoto);
 
-            _imagePreview = new StackPanel
+            _lblFileCount = new TextBlock
             {
-                Orientation = Orientation.Horizontal,
-                Spacing = 8,
-                Margin = new Thickness(0, 8, 0, 0)
+                Text = "No photos selected (optional)",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+                VerticalAlignment = VerticalAlignment.Center
             };
-            var imageScroll = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = _imagePreview
-            };
-            form.Children.Add(imageScroll);
+            photoRow.Children.Add(_lblFileCount);
+            form.Children.Add(photoRow);
 
             scroll.Content = form;
             root.Children.Add(scroll);
             Content = root;
         }
 
-        private void UpdatePredictedPrice()
-        {
-            try
-            {
-                var conditionStr = _condition.SelectedItem?.ToString() ?? "9/10";
-                var predicted = PriceEstimator.Estimate(_scan?.Metadata, conditionStr);
-                if (predicted > 0)
-                {
-                    _priceHint.Text = $"(Estimated fair price: PKR {predicted:N0})";
-                    _priceHint.IsVisible = true;
-                }
-                else
-                {
-                    _priceHint.Text = "(Run a hardware scan first to see an estimated price)";
-                    _priceHint.IsVisible = true;
-                }
-            }
-            catch
-            {
-                _priceHint.IsVisible = false;
-            }
-        }
-
-        private async Task PickImagesAsync()
+        private async Task OnSelectPhotosAsync()
         {
             var topLevel = TopLevel.GetTopLevel(this);
             if (topLevel == null) return;
 
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Select photos (up to 8)",
+                Title = $"Select up to {MAX_PHOTOS} photos",
                 AllowMultiple = true,
-                FileTypeFilter = new[] { new FilePickerFileType("Images") { Patterns = new[] { "*.jpg", "*.jpeg", "*.png" } } }
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("Images") { Patterns = new[] { "*.jpg", "*.jpeg", "*.png" } }
+                }
             });
 
             if (files == null || files.Count == 0) return;
 
-            foreach (var file in files.Take(8 - _imagePaths.Count))
+            _selectedFiles.Clear();
+            foreach (var f in files.Take(MAX_PHOTOS))
             {
-                var path = file.TryGetLocalPath();
-                if (string.IsNullOrEmpty(path)) continue;
-
-                _imagePaths.Add(path);
-
-                try
-                {
-                    await using var stream = File.OpenRead(path);
-                    var bmp = new Bitmap(stream);
-
-                    var thumb = new Border
-                    {
-                        Width = 80,
-                        Height = 80,
-                        CornerRadius = new CornerRadius(8),
-                        BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
-                        BorderThickness = new Thickness(1),
-                        Child = new AvImage
-                        {
-                            Source = bmp,
-                            Stretch = Stretch.UniformToFill
-                        }
-                    };
-                    _imagePreview.Children.Add(thumb);
-                }
-                catch { /* ignore broken files */ }
+                var path = f.TryGetLocalPath();
+                if (!string.IsNullOrEmpty(path))
+                    _selectedFiles.Add(path);
             }
 
-            _statusText.Text = $"{_imagePaths.Count} photo(s) selected.";
+            _lblFileCount.Text = $"{_selectedFiles.Count} photo(s) selected";
+            _lblFileCount.Foreground = new SolidColorBrush(Color.Parse("#10b981"));
         }
 
-        private async Task PublishAsync()
+        private async Task OnPublishAsync()
         {
-            if (string.IsNullOrWhiteSpace(_title.Text)) { ShowStatus("Please enter a title.", true); return; }
-            if (string.IsNullOrWhiteSpace(_price.Text) || !double.TryParse(_price.Text, out var price)) { ShowStatus("Please enter a valid price.", true); return; }
-            if (_imagePaths.Count == 0) { ShowStatus("Please add at least one photo.", true); return; }
+            if (string.IsNullOrWhiteSpace(_txtTitle.Text) ||
+                string.IsNullOrWhiteSpace(_txtPrice.Text))
+            {
+                ShowStatus("Title and Price are required.", true);
+                return;
+            }
 
-            _btnSubmit.IsEnabled = false;
-            _btnAddImages.IsEnabled = false;
-            ShowStatus("Compressing and uploading photos…", false);
+            _btnPost.IsEnabled = false;
+            _btnPost.Content = "Uploading...";
+            _pBar.IsVisible = true;
+            _pBar.IsIndeterminate = true;
 
             try
             {
-                // Compress images cross-platform with ImageSharp
-                var imageIds = new List<string>();
-                int idx = 0;
-                foreach (var path in _imagePaths)
-                {
-                    using var ms = await CompressImageAsync(path, targetKb: 100);
-                    var name = $"ads/{_username}_{DateTime.UtcNow.Ticks}_{Path.GetFileName(path)}";
-                    var id = await DbHelper.UploadStream(_username, ms, name);
-                    imageIds.Add(id);
+                var imageUrls = new List<string>();
 
-                    idx++;
-                    ShowStatus($"Uploaded {idx} of {_imagePaths.Count} photo(s)…", false);
+                if (_selectedFiles.Count > 0)
+                {
+                    _pBar.IsIndeterminate = false;
+                    _pBar.Value = 0;
+
+                    for (int i = 0; i < _selectedFiles.Count; i++)
+                    {
+                        string file = _selectedFiles[i];
+
+                        ShowStatus($"Compressing photo {i + 1} of {_selectedFiles.Count}...", false);
+                        using var compressed = await CompressImageAsync(file, targetKb: 100);
+
+                        double kb = compressed.Length / 1024.0;
+                        ShowStatus($"Uploading photo {i + 1} of {_selectedFiles.Count}  ({kb:F0} KB)...", false);
+
+                        string key = $"ads/{_username}_{DateTime.Now.Ticks}_{Path.GetFileName(file)}.jpg";
+                        string url = await DbHelper.UploadStream(_username, compressed, key);
+                        imageUrls.Add(url);
+
+                        _pBar.Value = (int)((i + 1) / (double)_selectedFiles.Count * 80);
+                    }
                 }
 
-                ShowStatus("Saving listing…", false);
+                ShowStatus("Saving listing...", false);
+                _pBar.Value = 85;
 
-                // ML-based price prediction is Windows-only (ML.NET architecture restriction)
-                int? predictedPrice = null;
-
-                await DbHelper.SaveAdPost(_username, new
+                var ad = new Dictionary<string, object>();
+                if (_scan?.Metadata != null)
                 {
-                    seller = _username,
-                    title = _title.Text?.Trim(),
-                    description = _description.Text?.Trim(),
-                    price = (int)price,
-                    location = _location.Text?.Trim(),
-                    condition = _condition.SelectedItem?.ToString(),
-                    images = imageIds,
-                    metadata = _scan?.Metadata,
-                    predictedPrice = predictedPrice,
-                    publishedAt = DateTime.UtcNow.ToString("o"),
-                    sold = false
-                });
+                    foreach (var kv in _scan.Metadata)
+                        ad["sys_" + kv.Key] = kv.Value;
+                }
 
-                ShowStatus("✓ Listing published successfully!", false);
+                ad["title"] = _txtTitle.Text.Trim();
+                ad["price"] = _txtPrice.Text.Trim();
+                ad["desc"] = _txtDesc.Text?.Trim() ?? "";
+                ad["condition"] = _cmbCondition.SelectedItem?.ToString() ?? "";
+                ad["years_used"] = (int)(_numYearsUsed.Value ?? 0);
+                ad["user"] = _username;
+                ad["date"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                ad["images"] = imageUrls;
+
+#if HAS_ML
+                try
+                {
+                    float predicted = PricePredictor.Predict(
+                        _scan?.Metadata, _cmbCondition.SelectedItem?.ToString());
+                    if (predicted > 0f)
+                    {
+                        ad["predicted_price_min"] = (long)Math.Round(predicted * 0.90f);
+                        ad["predicted_price_max"] = (long)Math.Round(predicted * 1.10f);
+                    }
+                }
+                catch { }
+#endif
+
+                await DbHelper.SaveAdPost(_username, ad);
+
+                _pBar.Value = 100;
+                ShowStatus($"Done -- {imageUrls.Count} photo(s) uploaded", false);
                 _statusText.Foreground = new SolidColorBrush(Color.Parse("#10b981"));
 
-                await Task.Delay(1500);
+                await Task.Delay(1200);
                 Close(true);
             }
             catch (Exception ex)
             {
-                ShowStatus($"Error: {ex.Message}", true);
-                _btnSubmit.IsEnabled = true;
-                _btnAddImages.IsEnabled = true;
+                ShowStatus($"Upload failed: {ex.Message}", true);
+                _btnPost.IsEnabled = true;
+                _btnPost.Content = "Publish Listing";
+                _pBar.IsVisible = false;
             }
         }
 
@@ -336,8 +396,7 @@ namespace PC_inspect_beta.UI.Avalonia
             int targetBytes = targetKb * 1024;
             using var img = await SixImage.LoadAsync(path);
 
-            // Try various quality levels
-            foreach (var q in new[] { 85, 70, 55, 40, 25 })
+            foreach (var q in new[] { 85, 75, 65, 55, 45, 35, 25, 15, 10 })
             {
                 var ms = new MemoryStream();
                 await img.SaveAsJpegAsync(ms, new JpegEncoder { Quality = q });
@@ -345,11 +404,11 @@ namespace PC_inspect_beta.UI.Avalonia
                 ms.Dispose();
             }
 
-            // Try shrinking dimensions
-            foreach (var scale in new[] { 0.75, 0.5, 0.35, 0.2 })
+            foreach (var scale in new[] { 0.75, 0.60, 0.50, 0.40, 0.30, 0.20 })
             {
-                using var scaled = img.Clone(x => x.Resize((int)(img.Width * scale), (int)(img.Height * scale)));
-                foreach (var q in new[] { 60, 35, 15 })
+                using var scaled = img.Clone(x => x.Resize(
+                    (int)(img.Width * scale), (int)(img.Height * scale)));
+                foreach (var q in new[] { 70, 40, 15 })
                 {
                     var ms = new MemoryStream();
                     await scaled.SaveAsJpegAsync(ms, new JpegEncoder { Quality = q });
@@ -358,8 +417,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 }
             }
 
-            // Final fallback
-            using var tiny = img.Clone(x => x.Resize((int)(img.Width * 0.15), (int)(img.Height * 0.15)));
+            using var tiny = img.Clone(x => x.Resize(
+                (int)(img.Width * 0.15), (int)(img.Height * 0.15)));
             var final = new MemoryStream();
             await tiny.SaveAsJpegAsync(final, new JpegEncoder { Quality = 10 });
             final.Position = 0;
@@ -374,15 +433,41 @@ namespace PC_inspect_beta.UI.Avalonia
                 : new SolidColorBrush(Color.Parse("#94a3b8"));
         }
 
-        private static TextBlock MakeLabel(string text) => new()
+        private string BuildSpecSnippet()
+        {
+            var meta = _scan?.Metadata;
+            if (meta == null) return "";
+
+            var lines = new List<string>();
+            if (meta.TryGetValue("cpu_name", out var cpu)) lines.Add($"CPU  : {cpu}");
+            if (meta.TryGetValue("ram_total_gb", out var ram)) lines.Add($"RAM  : {ram} GB");
+            if (meta.TryGetValue("gpu_name", out var gpu)) lines.Add($"GPU  : {gpu}");
+            if (meta.TryGetValue("motherboard", out var mbb)) lines.Add($"Board: {mbb}");
+            return string.Join("\n", lines);
+        }
+
+        private static string BuildFallbackTitle(Dictionary<string, object>? meta)
+        {
+            if (meta == null) return "";
+            var parts = new List<string>();
+            if (meta.TryGetValue("cpu_name", out var cpu))
+                parts.Add(cpu.ToString() ?? "");
+            if (meta.TryGetValue("ram_total_gb", out var ram))
+                parts.Add($"{ram} GB RAM");
+            if (meta.TryGetValue("gpu_name", out var gpu))
+                parts.Add(gpu.ToString() ?? "");
+            return string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p)));
+        }
+
+        private static TextBlock MakeLabel(string text, bool accent = false) => new()
         {
             Text = text,
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+            Foreground = new SolidColorBrush(Color.Parse(accent ? "#5ea0ff" : "#94a3b8")),
             Margin = new Thickness(0, 4, 0, 2)
         };
 
-        private static TextBox MakeInput(string placeholder = "", bool multiline = false) => new()
+        private static TextBox MakeInput(bool multiline = false) => new()
         {
             Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
             Foreground = Brushes.White,
@@ -393,8 +478,7 @@ namespace PC_inspect_beta.UI.Avalonia
             FontSize = 14,
             Height = multiline ? 100 : 44,
             AcceptsReturn = multiline,
-            TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
-            Watermark = placeholder
+            TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap
         };
     }
 }

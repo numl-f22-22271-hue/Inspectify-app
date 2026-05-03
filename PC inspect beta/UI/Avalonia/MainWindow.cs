@@ -4,10 +4,10 @@ using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using PC_inspect_beta.Config;
 using PC_inspect_beta.Core;
 using PC_inspect_beta.Core.Models;
 using PC_inspect_beta.Core.Platform;
@@ -20,34 +20,30 @@ namespace PC_inspect_beta.UI.Avalonia
         private TextBlock _status = null!;
         private ProgressBar _progress = null!;
         private Button _scanBtn = null!;
-        private Button _signInBtn = null!;
+        private Button _stopBtn = null!;
         private Button _postAdBtn = null!;
         private Button _exportPdfBtn = null!;
         private Button _kbTestBtn = null!;
         private Button _tpTestBtn = null!;
-        private Button _signOutBtn = null!;
-        private TextBlock _userLabel = null!;
 
-        private string? _username;
         private ScanResult? _lastScan;
 
         public MainWindow()
         {
-            Title  = "Inspectify Scanner";
+            Title  = AppConfig.AppName;
             Width  = 1100;
             Height = 760;
             MinWidth  = 720;
             MinHeight = 520;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
             BuildUi();
-            UpdateAuthUi();
         }
 
         private void BuildUi()
         {
             var root = new DockPanel();
 
-            // ── Header ───────────────────────────────────────────────
+            // Header
             var header = new Border
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
@@ -62,14 +58,14 @@ namespace PC_inspect_beta.UI.Avalonia
             var titleStack = new StackPanel();
             titleStack.Children.Add(new TextBlock
             {
-                Text = "Inspectify Scanner",
+                Text = AppConfig.AppName,
                 FontSize = 22,
                 FontWeight = FontWeight.Bold,
                 Foreground = Brushes.White
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = $"Platform: {PlatformDetector.PlatformName}  •  inspectifylapstore.me",
+                Text = AppConfig.Tagline,
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
                 Margin = new Thickness(0, 4, 0, 0)
@@ -77,33 +73,21 @@ namespace PC_inspect_beta.UI.Avalonia
             Grid.SetColumn(titleStack, 0);
             headerGrid.Children.Add(titleStack);
 
-            // User indicator + sign in/out
-            var userPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-            _userLabel = new TextBlock
+            // Version pill
+            var versionLabel = new TextBlock
             {
-                Text = "Not signed in",
+                Text = $"v{AppConfig.Version}",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            userPanel.Children.Add(_userLabel);
-
-            _signInBtn = MakeBtn("Sign In", "#2b72d4", small: true);
-            _signInBtn.Click += async (_, _) => await DoSignInAsync();
-            userPanel.Children.Add(_signInBtn);
-
-            _signOutBtn = MakeBtn("Sign Out", "#243447", small: true);
-            _signOutBtn.Click += (_, _) => SignOut();
-            _signOutBtn.IsVisible = false;
-            userPanel.Children.Add(_signOutBtn);
-
-            Grid.SetColumn(userPanel, 1);
-            headerGrid.Children.Add(userPanel);
+            Grid.SetColumn(versionLabel, 1);
+            headerGrid.Children.Add(versionLabel);
 
             header.Child = headerGrid;
             root.Children.Add(header);
 
-            // ── Action bar ───────────────────────────────────────────
+            // Action bar
             var actionBar = new Border
             {
                 Background = new SolidColorBrush(Color.Parse("#1e2a3a")),
@@ -113,17 +97,29 @@ namespace PC_inspect_beta.UI.Avalonia
 
             var actionStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
 
-            _scanBtn = MakeBtn("Run Hardware Scan", "#2b72d4");
+            _scanBtn = MakeBtn("Start System Scan", "#2b72d4");
             _scanBtn.Click += async (_, _) => await RunScanAsync();
             actionStack.Children.Add(_scanBtn);
 
-            _postAdBtn = MakeBtn("Post Ad", "#10b981");
-            _postAdBtn.Click += async (_, _) => await PostAdAsync();
-            actionStack.Children.Add(_postAdBtn);
+            _stopBtn = MakeBtn("Stop / Clear Memory", "#ef4444");
+            _stopBtn.Click += (_, _) =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                _progress.IsVisible = false;
+                SetStatus("Memory released.", "#94a3b8");
+            };
+            actionStack.Children.Add(_stopBtn);
 
-            _exportPdfBtn = MakeBtn("Export PDF", "#f59e0b");
+            _exportPdfBtn = MakeBtn("Save PDF Report", "#f59e0b");
+            _exportPdfBtn.IsEnabled = false;
             _exportPdfBtn.Click += (_, _) => ExportPdf();
             actionStack.Children.Add(_exportPdfBtn);
+
+            _postAdBtn = MakeBtn("Upload / Sell Device", "#10b981");
+            _postAdBtn.IsEnabled = false;
+            _postAdBtn.Click += async (_, _) => await SellDeviceAsync();
+            actionStack.Children.Add(_postAdBtn);
 
             _kbTestBtn = MakeBtn("Keyboard Test", "#243447");
             _kbTestBtn.Click += async (_, _) =>
@@ -141,19 +137,30 @@ namespace PC_inspect_beta.UI.Avalonia
             };
             actionStack.Children.Add(_tpTestBtn);
 
-            _status = new TextBlock
-            {
-                Text = "Ready.",
-                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(12, 0, 0, 0),
-                FontSize = 13
-            };
-            actionStack.Children.Add(_status);
             actionBar.Child = actionStack;
             root.Children.Add(actionBar);
 
-            // ── Progress ─────────────────────────────────────────────
+            // Status bar
+            var statusBar = new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#0c1e1a")),
+                Padding = new Thickness(20, 10),
+                BorderBrush = new SolidColorBrush(Color.Parse("#163c30")),
+                BorderThickness = new Thickness(0, 0, 0, 1)
+            };
+            DockPanel.SetDock(statusBar, Dock.Top);
+
+            _status = new TextBlock
+            {
+                Text = "Ready to scan.",
+                Foreground = new SolidColorBrush(Color.Parse("#10b981")),
+                FontSize = 13,
+                FontWeight = FontWeight.SemiBold
+            };
+            statusBar.Child = _status;
+            root.Children.Add(statusBar);
+
+            // Progress
             _progress = new ProgressBar
             {
                 Height = 3,
@@ -164,7 +171,7 @@ namespace PC_inspect_beta.UI.Avalonia
             DockPanel.SetDock(_progress, Dock.Top);
             root.Children.Add(_progress);
 
-            // ── Report area ──────────────────────────────────────────
+            // Report area
             _output = new TextBox
             {
                 IsReadOnly = true,
@@ -177,90 +184,58 @@ namespace PC_inspect_beta.UI.Avalonia
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(20),
                 Text =
-                    "Welcome to Inspectify Scanner.\n\n" +
-                    "1. Sign in (top right) with your Inspectify LapStore account\n" +
-                    "2. Click 'Run Hardware Scan' to inspect this machine\n" +
-                    "3. Click 'Post Ad' to publish a marketplace listing\n\n" +
+                    $"Welcome to {AppConfig.AppName}.\n\n" +
+                    "1. Click 'Start System Scan' to inspect this device\n" +
+                    "2. Click 'Save PDF Report' to export the scan\n" +
+                    "3. Click 'Upload / Sell Device' to list on the marketplace\n\n" +
                     "Optional:\n" +
-                    "  • 'Export PDF' — save the scan as a PDF report\n" +
-                    "  • 'Keyboard Test' — verify all keys work\n" +
-                    "  • 'Touchpad Test' — verify touchpad coverage\n"
+                    "  - Keyboard Test — verify all keys work\n" +
+                    "  - Touchpad Test — verify touchpad coverage\n"
             };
             root.Children.Add(_output);
 
             Content = root;
         }
 
-        private void UpdateAuthUi()
+        private async Task SellDeviceAsync()
         {
-            bool signedIn = !string.IsNullOrEmpty(_username);
-            _userLabel.Text = signedIn ? $"Signed in as @{_username}" : "Not signed in";
-            _userLabel.Foreground = signedIn
-                ? new SolidColorBrush(Color.Parse("#5ea0ff"))
-                : new SolidColorBrush(Color.Parse("#94a3b8"));
-
-            _signInBtn.IsVisible = !signedIn;
-            _signOutBtn.IsVisible = signedIn;
-            _postAdBtn.IsEnabled = signedIn && _lastScan != null;
-            _exportPdfBtn.IsEnabled = _lastScan != null;
-        }
-
-        private async Task DoSignInAsync()
-        {
-            var w = new LoginWindow();
-            var result = await w.ShowDialog<bool>(this);
-            if (result && !string.IsNullOrEmpty(w.AuthenticatedUsername))
-            {
-                _username = w.AuthenticatedUsername;
-                _status.Text = $"Welcome, @{_username}!";
-                UpdateAuthUi();
-            }
-        }
-
-        private void SignOut()
-        {
-            _username = null;
-            _status.Text = "Signed out.";
-            UpdateAuthUi();
-        }
-
-        private async Task PostAdAsync()
-        {
-            if (string.IsNullOrEmpty(_username))
-            {
-                _status.Text = "Please sign in first.";
-                return;
-            }
             if (_lastScan == null)
             {
-                _status.Text = "Please run a hardware scan first.";
+                SetStatus("Please run a scan first.", "#f59e0b");
                 return;
             }
 
-            var w = new AdPostWindow(_username, _lastScan);
-            var posted = await w.ShowDialog<bool>(this);
-            if (posted) _status.Text = "Listing published successfully.";
+            var login = new LoginWindow();
+            var loggedIn = await login.ShowDialog<bool>(this);
+            if (!loggedIn || string.IsNullOrEmpty(login.AuthenticatedUsername))
+                return;
+
+            var ad = new AdPostWindow(login.AuthenticatedUsername, _lastScan);
+            var posted = await ad.ShowDialog<bool>(this);
+            if (posted) SetStatus("Listing published successfully!", "#10b981");
         }
 
         private void ExportPdf()
         {
-            if (_lastScan == null) { _status.Text = "Run a scan first."; return; }
+            if (_lastScan == null) { SetStatus("Run a scan first.", "#f59e0b"); return; }
             try
             {
                 var path = ReportExporter.SaveToPdf(_lastScan.ReportText);
-                _status.Text = $"PDF saved: {path}";
+                SetStatus($"PDF saved: {System.IO.Path.GetFileName(path)}", "#10b981");
             }
             catch (Exception ex)
             {
-                _status.Text = $"Export failed: {ex.Message}";
+                SetStatus($"Export failed: {ex.Message}", "#ef4444");
             }
         }
 
         private async Task RunScanAsync()
         {
             _scanBtn.IsEnabled = false;
+            _exportPdfBtn.IsEnabled = false;
+            _postAdBtn.IsEnabled = false;
             _progress.IsVisible = true;
-            _status.Text = "Scanning hardware…";
+            SetStatus("Scanning hardware...", "#f59e0b");
             _output.Text = "";
 
             var sb = new StringBuilder();
@@ -277,18 +252,7 @@ namespace PC_inspect_beta.UI.Avalonia
             {
                 var scanner = await Task.Run(() => PlatformDetector.CreateScanner());
 
-                await UpdateAsync("Scanning OS…", sb);
-                var os = await Task.Run(scanner.GetOsInfo);
-                AppendSection(sb, "OS & POWER");
-                sb.AppendLine($"  Name        : {os.Name}");
-                sb.AppendLine($"  Version     : {os.Version}");
-                sb.AppendLine($"  Architecture: {os.Architecture}");
-                sb.AppendLine($"  Uptime      : {os.Uptime}");
-                sb.AppendLine();
-                result.Metadata["os_version"] = os.Version;
-                result.Metadata["architecture"] = os.Architecture;
-
-                await UpdateAsync("Scanning CPU…", sb);
+                await UpdateAsync("Detecting CPU...", sb);
                 var cpu = await Task.Run(scanner.GetCpuInfo);
                 AppendSection(sb, "CPU");
                 sb.AppendLine($"  Model       : {cpu.Name}");
@@ -300,7 +264,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["cpu_cores"] = cpu.Cores;
                 result.Metadata["cpu_threads"] = cpu.Threads;
 
-                await UpdateAsync("Scanning RAM…", sb);
+                await UpdateAsync("Reading RAM...", sb);
                 var ram = await Task.Run(scanner.GetRamInfo);
                 AppendSection(sb, "RAM");
                 sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ram.TotalMb} MB)");
@@ -310,7 +274,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine();
                 result.Metadata["ram_total_gb"] = ram.TotalMb / 1024;
 
-                await UpdateAsync("Scanning storage…", sb);
+                await UpdateAsync("Scanning storage...", sb);
                 var storage = await Task.Run(scanner.GetStorageInfo);
                 AppendSection(sb, "STORAGE");
                 long totalStorage = 0;
@@ -323,7 +287,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 result.Metadata["storage_total_gb"] = totalStorage;
                 result.Metadata["storage_type"] = storage.FirstOrDefault()?.Type ?? "";
 
-                await UpdateAsync("Scanning GPU…", sb);
+                await UpdateAsync("Checking GPU...", sb);
                 var gpus = await Task.Run(scanner.GetGpuInfo);
                 AppendSection(sb, "GPU");
                 foreach (var g in gpus)
@@ -331,14 +295,14 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine();
                 result.Metadata["gpu_name"] = gpus.FirstOrDefault()?.Name ?? "";
 
-                await UpdateAsync("Scanning battery…", sb);
+                await UpdateAsync("Reading battery info...", sb);
                 var bat = await Task.Run(scanner.GetBatteryInfo);
                 AppendSection(sb, "BATTERY");
                 if (bat == null)
                     sb.AppendLine("  No battery (Desktop)");
                 else
                 {
-                    sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging ⚡)" : "(on battery)")}");
+                    sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging)" : "(on battery)")}");
                     if (bat.DesignCapacityMwh > 0)
                         sb.AppendLine($"  Health      : {bat.HealthPercent}% ({bat.FullChargeCapacityMwh} / {bat.DesignCapacityMwh} mWh)");
                     result.Metadata["battery_percent"] = bat.PercentRemaining;
@@ -346,14 +310,14 @@ namespace PC_inspect_beta.UI.Avalonia
                 }
                 sb.AppendLine();
 
-                await UpdateAsync("Scanning displays…", sb);
+                await UpdateAsync("Scanning displays...", sb);
                 var displays = await Task.Run(scanner.GetDisplayInfo);
                 AppendSection(sb, "DISPLAY");
                 foreach (var d in displays)
-                    sb.AppendLine($"  {d.Width} × {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
+                    sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
                 sb.AppendLine();
 
-                await UpdateAsync("Scanning BIOS…", sb);
+                await UpdateAsync("Reading BIOS info...", sb);
                 var bios = await Task.Run(scanner.GetBiosInfo);
                 AppendSection(sb, "BIOS / MOTHERBOARD");
                 sb.AppendLine($"  Manufacturer: {bios.Manufacturer}");
@@ -361,68 +325,91 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine($"  Model       : {bios.MotherboardModel}");
                 sb.AppendLine();
 
-                await UpdateAsync("Scanning network…", sb);
+                await UpdateAsync("Scanning network cards...", sb);
                 var nets = await Task.Run(scanner.GetNetworkInfo);
                 AppendSection(sb, "NETWORK");
                 foreach (var n in nets)
                     sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
                 sb.AppendLine();
 
-                // ── Stress tests (cross-platform) ────────────────────────
-                await UpdateAsync("RAM stress test…", sb);
+                await UpdateAsync("Scanning OS...", sb);
+                var os = await Task.Run(scanner.GetOsInfo);
+                AppendSection(sb, "OS & POWER");
+                sb.AppendLine($"  Name        : {os.Name}");
+                sb.AppendLine($"  Version     : {os.Version}");
+                sb.AppendLine($"  Architecture: {os.Architecture}");
+                sb.AppendLine($"  Uptime      : {os.Uptime}");
+                sb.AppendLine();
+                result.Metadata["os_version"] = os.Version;
+                result.Metadata["architecture"] = os.Architecture;
+
+                // Stress tests
+                await UpdateAsync("RAM stress test...", sb);
                 var ramStress = await Task.Run(StressTestEngine.RunRamStress);
                 AppendSection(sb, "STRESS TEST — RAM");
                 sb.AppendLine($"  {ramStress.Summary}");
-                sb.AppendLine($"  Result      : {(ramStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                sb.AppendLine($"  Result      : {(ramStress.Passed ? "PASSED" : "FAILED")}");
                 if (ramStress.Metrics.TryGetValue("write_speed_mbs", out var wsm))
                     result.Metadata["ram_write_speed_mbs"] = wsm;
                 result.Metadata["stress_ram"] = ramStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("CPU stress test…", sb);
+                await UpdateAsync("CPU stress test...", sb);
                 var cpuStress = await Task.Run(StressTestEngine.RunCpuStress);
                 AppendSection(sb, "STRESS TEST — CPU");
                 sb.AppendLine($"  {cpuStress.Summary}");
-                sb.AppendLine($"  Result      : {(cpuStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                sb.AppendLine($"  Result      : {(cpuStress.Passed ? "PASSED" : "FAILED")}");
                 result.Metadata["stress_cpu"] = cpuStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("GPU/compute stress test…", sb);
+                await UpdateAsync("GPU/compute stress test...", sb);
                 var gpuStress = await Task.Run(StressTestEngine.RunGpuStress);
                 AppendSection(sb, "STRESS TEST — GPU/COMPUTE");
                 sb.AppendLine($"  {gpuStress.Summary}");
-                sb.AppendLine($"  Result      : {(gpuStress.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                sb.AppendLine($"  Result      : {(gpuStress.Passed ? "PASSED" : "FAILED")}");
                 result.Metadata["stress_gpu"] = gpuStress.Passed ? "Passed" : "Failed";
                 sb.AppendLine();
 
-                await UpdateAsync("Storage R/W speed test…", sb);
+                await UpdateAsync("Storage R/W speed test...", sb);
                 var storageStress = await Task.Run(StressTestEngine.RunStorageStress);
                 AppendSection(sb, "STRESS TEST — STORAGE");
                 foreach (var s in storageStress)
                 {
                     sb.AppendLine($"  {s.Name}");
                     sb.AppendLine($"    {s.Summary}");
-                    sb.AppendLine($"    Result    : {(s.Passed ? "✔ PASSED" : "✖ FAILED")}");
+                    sb.AppendLine($"    Result    : {(s.Passed ? "PASSED" : "FAILED")}");
                 }
                 result.Metadata["stress_storage"] = storageStress.All(s => s.Passed) ? "Passed" : "Failed";
 
                 result.ReportText = sb.ToString();
                 _lastScan = result;
-                _status.Text = "Scan + stress tests complete ✓";
+
+#if HAS_ML
+                _ = Task.Run(() => PricePredictor.EnsureTrained());
+#endif
+
+                SetStatus("Scan complete.", "#10b981");
+                _exportPdfBtn.IsEnabled = true;
+                _postAdBtn.IsEnabled = true;
             }
             catch (Exception ex)
             {
                 sb.AppendLine();
                 sb.AppendLine($"[ERROR] {ex.Message}");
-                _status.Text = "Scan failed.";
+                SetStatus("Scan failed.", "#ef4444");
             }
             finally
             {
                 _output.Text = sb.ToString();
                 _scanBtn.IsEnabled = true;
                 _progress.IsVisible = false;
-                UpdateAuthUi();
             }
+        }
+
+        private void SetStatus(string msg, string color)
+        {
+            _status.Text = msg;
+            _status.Foreground = new SolidColorBrush(Color.Parse(color));
         }
 
         private static void AppendSection(StringBuilder sb, string name)
@@ -441,7 +428,7 @@ namespace PC_inspect_beta.UI.Avalonia
             });
         }
 
-        private static Button MakeBtn(string text, string color, bool small = false)
+        private static Button MakeBtn(string text, string color)
         {
             return new Button
             {
@@ -449,8 +436,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 Background = new SolidColorBrush(Color.Parse(color)),
                 Foreground = Brushes.White,
                 FontWeight = FontWeight.SemiBold,
-                FontSize = small ? 12 : 13,
-                Padding = small ? new Thickness(14, 6) : new Thickness(16, 9),
+                FontSize = 13,
+                Padding = new Thickness(16, 9),
                 CornerRadius = new CornerRadius(8)
             };
         }

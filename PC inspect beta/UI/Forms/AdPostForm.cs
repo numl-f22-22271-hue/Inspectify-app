@@ -109,7 +109,7 @@ namespace PC_inspect_beta.UI.Forms
         private TextBox _txtTitle, _txtPrice, _txtDesc;
         private NumericUpDown _numYearsUsed;
         private ComboBox _cmbCondition;
-        private Label _lblFileCount, _lblUploadStatus, _lblPriceHint;
+        private Label _lblFileCount, _lblUploadStatus;
         private ProgressBar _pBar;
         private Button _btnPost;
 
@@ -181,20 +181,6 @@ namespace PC_inspect_beta.UI.Forms
             // ── Price ─────────────────────────────────────────────────────────
             AddField("Price (PKR)", ref _txtPrice, ref y, X, W);
 
-            // Predicted price hint shown UNDER the price field, in brackets
-            _lblPriceHint = new Label
-            {
-                Location = new Point(X, y - 50),
-                Size     = new Size(W, 18),
-                Font     = new Font(Theme.NormalFont.FontFamily, 9, FontStyle.Italic),
-                ForeColor = Color.FromArgb(94, 160, 255),
-                BackColor = Color.Transparent,
-                Text = ""
-            };
-            Controls.Add(_lblPriceHint);
-            // Adjust y down a bit so condition doesn't overlap the hint
-            y += 4;
-
             // ── Condition + Years Used (always interactive) ───────────────────
             int halfW = (W - 12) / 2;
             Controls.Add(UIHelper.CreateLabel("Condition",
@@ -238,13 +224,7 @@ namespace PC_inspect_beta.UI.Forms
             {
                 if (_cmbCondition.SelectedItem?.ToString() == "New")
                     _numYearsUsed.Value = 0;
-                UpdatePredictedPriceLabel();
             };
-            _numYearsUsed.ValueChanged += (s, e) => UpdatePredictedPriceLabel();
-
-            // Initial prediction
-            UpdatePredictedPriceLabel();
-
             y += 80;
 
             // ── Description ───────────────────────────────────────────────────
@@ -450,35 +430,6 @@ namespace PC_inspect_beta.UI.Forms
             tb = UIHelper.CreateTextBox(new Point(x, y + 22), w);
             Controls.Add(tb);
             y += 68;
-        }
-
-        /// <summary>
-        /// Updates the predicted-price hint shown directly under the price field.
-        /// Tries the ML.NET PricePredictor first; falls back to PriceEstimator on errors.
-        /// </summary>
-        private void UpdatePredictedPriceLabel()
-        {
-            if (_lblPriceHint == null) return;
-            try
-            {
-                var condition = _cmbCondition?.SelectedItem?.ToString() ?? "Used";
-                int predicted = 0;
-                try
-                {
-                    predicted = (int)Core.PricePredictor.Predict(_scanMeta, condition);
-                }
-                catch
-                {
-                    predicted = Core.PriceEstimator.Estimate(_scanMeta, condition);
-                }
-                _lblPriceHint.Text = predicted > 0
-                    ? $"(Estimated fair price: PKR {predicted:N0})"
-                    : "";
-            }
-            catch
-            {
-                _lblPriceHint.Text = "";
-            }
         }
 
         private string BuildSpecSnippet()

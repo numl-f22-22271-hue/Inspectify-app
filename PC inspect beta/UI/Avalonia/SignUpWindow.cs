@@ -58,7 +58,7 @@ namespace PC_inspect_beta.UI.Avalonia
             });
             headerStack.Children.Add(new TextBlock
             {
-                Text = "Join Inspectify LapStore",
+                Text = "Join Inspectify LapStore to start selling",
                 FontSize = 13,
                 Foreground = new SolidColorBrush(Color.Parse("#e6fff4")),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -156,8 +156,7 @@ namespace PC_inspect_beta.UI.Avalonia
                     password = pass,
                     email = email,
                     phone = phone,
-                    dob = _dtpBirth.SelectedDate?.ToString("yyyy-MM-dd") ?? "",
-                    createdAt = DateTime.UtcNow.ToString("o")
+                    dob = _dtpBirth.SelectedDate?.ToString("yyyy-MM-dd") ?? ""
                 });
 
                 Close(user);
