@@ -75,39 +75,23 @@ jobs:
           -p:EnableCompressionInSingleFile=true
           -o publish/mac-arm64
 
-      - name: Create .app bundle + ZIP (Apple Silicon)
+      - name: Create .app bundle + DMG (Apple Silicon)
         run: |
           set -e
           APP="InspectifyScanner.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          ls -la publish/mac-arm64/
-          # Copy all published files (single-file + any native libs that couldn't be bundled)
           cp publish/mac-arm64/InspectifyScanner "$APP/Contents/MacOS/"
           chmod +x "$APP/Contents/MacOS/InspectifyScanner"
-          cat > "$APP/Contents/Info.plist" << 'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key><string>InspectifyScanner</string>
-            <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>
-            <key>CFBundleName</key><string>Inspectify Scanner</string>
-            <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>
-            <key>CFBundleShortVersionString</key><string>2.0.0</string>
-            <key>CFBundleVersion</key><string>2</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>LSMinimumSystemVersion</key><string>11.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
-          PLIST
-          ditto -c -k --keepParent "$APP" InspectifyScanner-macOS-AppleSilicon.zip
-          ls -la InspectifyScanner-macOS-AppleSilicon.zip
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleExecutable</key><string>InspectifyScanner</string>' '  <key>CFBundleIdentifier</key><string>me.inspectifylapstore.scanner</string>' '  <key>CFBundleName</key><string>Inspectify Scanner</string>' '  <key>CFBundleDisplayName</key><string>Inspectify Scanner</string>' '  <key>CFBundleShortVersionString</key><string>2.0.0</string>' '  <key>CFBundleVersion</key><string>2</string>' '  <key>CFBundlePackageType</key><string>APPL</string>' '  <key>LSMinimumSystemVersion</key><string>11.0</string>' '  <key>NSHighResolutionCapable</key><true/>' '</dict>' '</plist>' > "$APP/Contents/Info.plist"
+          mkdir dmg-staging
+          cp -r "$APP" dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "Inspectify Scanner" -srcfolder dmg-staging -ov -format UDZO InspectifyScanner-macOS-AppleSilicon.dmg
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64-build
-          path: InspectifyScanner-macOS-AppleSilicon.zip
+          path: InspectifyScanner-macOS-AppleSilicon.dmg
 
   # ──────────────────────────────────────────────
   #  macOS — Intel
@@ -224,7 +208,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/win/InspectifyScanner-Windows-x64.exe
-            artifacts/mac-arm64/InspectifyScanner-macOS-AppleSilicon.zip
+            artifacts/mac-arm64/InspectifyScanner-macOS-AppleSilicon.dmg
             artifacts/mac-x64/InspectifyScanner-macOS-Intel.dmg
             artifacts/linux/InspectifyScanner-Linux-x64
           body: |
@@ -237,7 +221,7 @@ jobs:
             | Platform | File | How to run |
             |----------|------|------------|
             | **Windows 10/11** | `InspectifyScanner-Windows-x64.exe` | Double-click |
-            | **macOS Apple Silicon** (M1–M4) | `InspectifyScanner-macOS-AppleSilicon.zip` | Unzip, drag to Applications |
+            | **macOS Apple Silicon** (M1–M4) | `InspectifyScanner-macOS-AppleSilicon.dmg` | Open DMG, drag to Applications |
             | **macOS Intel** | `InspectifyScanner-macOS-Intel.dmg` | Open DMG, drag to Applications |
             | **Linux x64** | `InspectifyScanner-Linux-x64` | `chmod +x` then run |
 
