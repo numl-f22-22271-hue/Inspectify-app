@@ -104,6 +104,7 @@ namespace PC_inspect_beta.Core.Platform
         public int Height { get; set; }
         public int RefreshHz { get; set; }
         public string Manufacturer { get; set; } = "";
+        public string DisplayType { get; set; } = "";
     }
 
     public class BiosInfo
