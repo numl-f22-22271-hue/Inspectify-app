@@ -355,7 +355,11 @@ namespace PC_inspect_beta.Core.Platform
                             }
 
                             if (d.Width > 0 && d.Height > 0)
+                            {
+                                if (string.IsNullOrEmpty(d.DisplayType))
+                                    d.DisplayType = InferDisplayType(mon);
                                 list.Add(d);
+                            }
                         }
                     }
                 }
@@ -369,7 +373,6 @@ namespace PC_inspect_beta.Core.Platform
                 {
                     if (line.Contains("Resolution:") || line.Contains("UI Looks like:"))
                     {
-                        // "Resolution: 3024 x 1964 Retina"
                         var parts = line.Split(':').LastOrDefault()?.Trim() ?? "";
                         parts = parts.Replace("Retina", "").Replace("HiDPI", "").Trim();
                         var xIdx = parts.IndexOfAny(new[] { 'x', 'X' });
@@ -378,7 +381,7 @@ namespace PC_inspect_beta.Core.Platform
                             var wStr = new string(parts[..xIdx].Trim().Where(char.IsDigit).ToArray());
                             var hStr = new string(parts[(xIdx + 1)..].Trim().TakeWhile(c => char.IsDigit(c) || c == ' ').ToArray()).Trim();
                             if (int.TryParse(wStr, out var w) && int.TryParse(hStr, out var h))
-                                list.Add(new DisplayInfo { Width = w, Height = h });
+                                list.Add(new DisplayInfo { Width = w, Height = h, DisplayType = "IPS LCD" });
                         }
                     }
                 }
@@ -455,6 +458,30 @@ namespace PC_inspect_beta.Core.Platform
             if (idx < 0) return 0;
             var numStr = new string(line[(idx + 1)..].Trim().TakeWhile(char.IsDigit).ToArray());
             return int.TryParse(numStr, out var n) ? n : 0;
+        }
+
+        private static string InferDisplayType(JsonElement mon)
+        {
+            var name = "";
+            if (mon.TryGetProperty("_name", out var n))
+                name = n.GetString() ?? "";
+
+            if (name.Contains("XDR", StringComparison.OrdinalIgnoreCase))
+                return "Liquid Retina XDR (Mini-LED)";
+            if (name.Contains("Liquid Retina", StringComparison.OrdinalIgnoreCase))
+                return "Liquid Retina (IPS LCD)";
+            if (name.Contains("Retina", StringComparison.OrdinalIgnoreCase))
+                return "Retina IPS LCD";
+
+            var isBuiltIn = name.Contains("Built-in", StringComparison.OrdinalIgnoreCase)
+                         || name.Contains("Color LCD", StringComparison.OrdinalIgnoreCase);
+            return isBuiltIn ? "IPS LCD" : "LCD";
+        }
+
+        public static bool HasTouchId()
+        {
+            var hw = Run("/usr/sbin/system_profiler", "SPHardwareDataType");
+            return hw.Contains("Touch ID", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

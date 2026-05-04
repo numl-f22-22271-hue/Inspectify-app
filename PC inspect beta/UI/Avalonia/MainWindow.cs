@@ -27,6 +27,7 @@ namespace PC_inspect_beta.UI.Avalonia
         private Button _tpTestBtn = null!;
 
         private ScanResult? _lastScan;
+        private string _networkSectionText = "";
 
         public MainWindow()
         {
@@ -250,7 +251,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 sb.AppendLine($"  Model       : {cpu.Name}");
                 sb.AppendLine($"  Cores       : {cpu.Cores}");
                 sb.AppendLine($"  Threads     : {cpu.Threads}");
-                sb.AppendLine($"  Max Clock   : {cpu.MaxClockMhz} MHz");
+                if (!PlatformDetector.IsMacOS)
+                    sb.AppendLine($"  Max Clock   : {cpu.MaxClockMhz} MHz");
                 sb.AppendLine();
                 result.Metadata["cpu_name"] = cpu.Name;
                 result.Metadata["cpu_cores"] = cpu.Cores;
@@ -259,10 +261,14 @@ namespace PC_inspect_beta.UI.Avalonia
                 await UpdateAsync("Reading RAM…", sb);
                 var ram = await Task.Run(scanner.GetRamInfo);
                 AppendSection(sb, "RAM");
-                sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ram.TotalMb} MB)");
+                long ramPow2 = NearestPow2(ram.TotalMb / 1024);
+                sb.AppendLine($"  Total       : {ram.TotalMb / 1024.0:F1} GB ({ramPow2} GB)");
                 sb.AppendLine($"  Available   : {ram.AvailableMb / 1024.0:F1} GB");
                 foreach (var s in ram.Sticks)
-                    sb.AppendLine($"  Stick       : {s.CapacityMb} MB {s.Type} {s.Manufacturer}");
+                {
+                    double stickGb = s.CapacityMb / 1024.0;
+                    sb.AppendLine($"  RAM Type    : {stickGb:F0} GB {s.Type} {s.Manufacturer}");
+                }
                 sb.AppendLine();
                 result.Metadata["ram_total_gb"] = ram.TotalMb / 1024;
 
@@ -272,7 +278,9 @@ namespace PC_inspect_beta.UI.Avalonia
                 long totalStorage = 0;
                 foreach (var d in storage)
                 {
-                    sb.AppendLine($"  {d.Mount,-10} {d.CapacityGb} GB ({d.FreeGb} GB free) — {d.Type} — {d.Model}");
+                    long storagePow2 = NearestPow2(d.CapacityGb);
+                    string pow2Label = storagePow2 >= 1024 ? $"{storagePow2 / 1024} TB" : $"{storagePow2} GB";
+                    sb.AppendLine($"  {d.Mount,-10} {d.CapacityGb} GB ({d.FreeGb} GB free) ({pow2Label}) — {d.Type} — {d.Model}");
                     totalStorage += d.CapacityGb;
                 }
                 sb.AppendLine();
@@ -295,7 +303,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 else
                 {
                     sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging)" : "(on battery)")}");
-                    if (bat.DesignCapacityMwh > 0)
+                    if (bat.DesignCapacityMwh > 0 && bat.HealthPercent > 0 && bat.HealthPercent <= 110)
                         sb.AppendLine($"  Health      : {bat.HealthPercent}% ({bat.FullChargeCapacityMwh} / {bat.DesignCapacityMwh} mWh)");
                     result.Metadata["battery_percent"] = bat.PercentRemaining;
                     result.Metadata["battery_health"] = bat.HealthPercent;
@@ -306,7 +314,10 @@ namespace PC_inspect_beta.UI.Avalonia
                 var displays = await Task.Run(scanner.GetDisplayInfo);
                 AppendSection(sb, "DISPLAY");
                 foreach (var d in displays)
-                    sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}");
+                {
+                    var typeStr = !string.IsNullOrEmpty(d.DisplayType) ? $"  [{d.DisplayType}]" : "";
+                    sb.AppendLine($"  {d.Width} x {d.Height}  {(d.RefreshHz > 0 ? $"@ {d.RefreshHz} Hz" : "")}{typeStr}");
+                }
                 sb.AppendLine();
 
                 await UpdateAsync("Reading BIOS info…", sb);
@@ -320,10 +331,12 @@ namespace PC_inspect_beta.UI.Avalonia
 
                 await UpdateAsync("Scanning network cards…", sb);
                 var nets = await Task.Run(scanner.GetNetworkInfo);
-                AppendSection(sb, "NETWORK");
+                var netSb = new StringBuilder();
+                AppendSection(netSb, "NETWORK");
                 foreach (var n in nets)
-                    sb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
-                sb.AppendLine();
+                    netSb.AppendLine($"  {n.Name,-12} {n.Type,-10} {n.MacAddress}  {n.IpAddress}");
+                netSb.AppendLine();
+                _networkSectionText = netSb.ToString();
 
                 await UpdateAsync("Scanning OS…", sb);
                 var os = await Task.Run(scanner.GetOsInfo);
@@ -407,19 +420,21 @@ namespace PC_inspect_beta.UI.Avalonia
 
         private async Task PromptTestsAsync(bool isLaptop)
         {
-            var promptKb = await ShowConfirmAsync("Keyboard Test",
-                "Scan complete. Run the Keyboard Test now?");
-            if (promptKb)
-            {
-                await RunKeyboardTestAsync();
+            await RunKeyboardTestAsync();
 
-                if (isLaptop)
-                {
-                    var promptTp = await ShowConfirmAsync("Touchpad Test",
-                        "Run the Touchpad Test now?");
-                    if (promptTp)
-                        await RunTouchpadTestAsync();
-                }
+            if (isLaptop)
+            {
+                await RunTouchpadTestAsync();
+
+                if (PlatformDetector.IsMacOS)
+                    await CheckTouchIdAsync();
+            }
+
+            if (_lastScan != null && !string.IsNullOrEmpty(_networkSectionText))
+            {
+                _lastScan.ReportText += _networkSectionText;
+                _networkSectionText = "";
+                _output.Text = _lastScan.ReportText;
             }
 
             if (_lastScan != null)
@@ -447,6 +462,25 @@ namespace PC_inspect_beta.UI.Avalonia
                 reportWin.Content = reportBox;
                 await reportWin.ShowDialog(this);
             }
+        }
+
+        private async Task CheckTouchIdAsync()
+        {
+            bool hasTouchId = await Task.Run(MacOSHardwareScanner.HasTouchId);
+            if (!hasTouchId || _lastScan == null) return;
+
+            var confirmed = await ShowConfirmAsync("Touch ID Check",
+                "Touch ID sensor detected.\nPlease test it now — does Touch ID work?");
+
+            var sb = new StringBuilder(_lastScan.ReportText);
+            AppendSection(sb, "TOUCH ID");
+            sb.AppendLine(confirmed
+                ? "  Result      : ✔ PASSED — Touch ID working"
+                : "  Result      : ✖ FAILED — Touch ID not working");
+            sb.AppendLine();
+            _lastScan.ReportText = sb.ToString();
+            _lastScan.Metadata["touchid_status"] = confirmed ? "Passed" : "Failed";
+            _output.Text = _lastScan.ReportText;
         }
 
         private async Task<bool> ShowConfirmAsync(string title, string message)
@@ -563,9 +597,17 @@ namespace PC_inspect_beta.UI.Avalonia
 
         private static void AppendSection(StringBuilder sb, string name)
         {
-            sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            sb.AppendLine($"  {name}");
-            sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            sb.AppendLine($"╔══════════════════════════════════════════════╗");
+            sb.AppendLine($"║  {name,-43}║");
+            sb.AppendLine($"╚══════════════════════════════════════════════╝");
+        }
+
+        private static long NearestPow2(long value)
+        {
+            if (value <= 0) return 0;
+            long p = 1;
+            while (p < value) p <<= 1;
+            return p;
         }
 
         private async Task UpdateAsync(string status, StringBuilder sb)

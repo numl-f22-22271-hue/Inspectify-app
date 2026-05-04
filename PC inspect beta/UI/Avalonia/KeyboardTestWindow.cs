@@ -37,7 +37,7 @@ namespace PC_inspect_beta.UI.Avalonia
         {
             "INS", "DEL", "HOME", "END", "PGUP", "PGDN",
             "LCTRL", "RCTRL", "LSHIFT", "RSHIFT", "LWIN", "RWIN", "LALT", "RALT",
-            "FN", "TAB", "CAPSLOCK", "⌃", "⌥", "⌘"
+            "FN", "TAB", "CAPSLOCK", "⌃", "⌥", "⌘", "F11"
         };
 
         private static HashSet<string> OptionalKeys => IsMac ? MacOptionalKeys : WindowsOptionalKeys;
@@ -152,10 +152,11 @@ namespace PC_inspect_beta.UI.Avalonia
             var headStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 20 };
             headStack.Children.Add(new TextBlock
             {
-                Text = "Press every key on your keyboard. Green = detected. Grey = not pressed.",
+                Text = "Press every key on your keyboard. Green = detected. Grey = not pressed.\nTip: Hold Fn to press F1–F12 keys if they control brightness/volume by default.",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap
             });
             _counter = new TextBlock
             {
