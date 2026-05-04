@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -425,9 +426,7 @@ namespace PC_inspect_beta.UI.Avalonia
             if (isLaptop)
             {
                 await RunTouchpadTestAsync();
-
-                if (PlatformDetector.IsMacOS)
-                    await CheckTouchIdAsync();
+                await CheckFingerprintSensorAsync();
             }
 
             if (_lastScan != null && !string.IsNullOrEmpty(_networkSectionText))
@@ -464,23 +463,65 @@ namespace PC_inspect_beta.UI.Avalonia
             }
         }
 
-        private async Task CheckTouchIdAsync()
+        private async Task CheckFingerprintSensorAsync()
         {
-            bool hasTouchId = await Task.Run(MacOSHardwareScanner.HasTouchId);
-            if (!hasTouchId || _lastScan == null) return;
+            var (detected, sensorName) = await Task.Run(DetectFingerprintSensor);
+            if (!detected || _lastScan == null) return;
 
-            var confirmed = await ShowConfirmAsync("Touch ID Check",
-                "Touch ID sensor detected.\nPlease test it now — does Touch ID work?");
+            var confirmed = await ShowConfirmAsync("Fingerprint Sensor",
+                $"{sensorName} detected.\nPlease test it now — does it work?");
 
             var sb = new StringBuilder(_lastScan.ReportText);
-            AppendSection(sb, "TOUCH ID");
+            AppendSection(sb, "FINGERPRINT SENSOR");
+            sb.AppendLine($"  Sensor      : {sensorName}");
             sb.AppendLine(confirmed
-                ? "  Result      : ✔ PASSED — Touch ID working"
-                : "  Result      : ✖ FAILED — Touch ID not working");
+                ? "  Result      : ✔ PASSED — Fingerprint sensor working"
+                : "  Result      : ✖ FAILED — Fingerprint sensor not working");
             sb.AppendLine();
             _lastScan.ReportText = sb.ToString();
-            _lastScan.Metadata["touchid_status"] = confirmed ? "Passed" : "Failed";
+            _lastScan.Metadata["fingerprint_status"] = confirmed ? "Passed" : "Failed";
             _output.Text = _lastScan.ReportText;
+        }
+
+        private static (bool Detected, string Name) DetectFingerprintSensor()
+        {
+            try
+            {
+                if (PlatformDetector.IsMacOS)
+                {
+                    if (MacOSHardwareScanner.HasTouchId())
+                        return (true, "Touch ID");
+                    return (false, "");
+                }
+
+                if (PlatformDetector.IsWindows)
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "wmic",
+                        Arguments = "path Win32_PnPEntity where \"PNPClass='Biometric'\" get Name /format:list",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p == null) return (false, "");
+                    if (!p.WaitForExit(10000)) return (false, "");
+                    var output = p.StandardOutput.ReadToEnd().Trim();
+                    foreach (var line in output.Split('\n'))
+                    {
+                        if (line.StartsWith("Name=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var name = line[5..].Trim();
+                            if (!string.IsNullOrEmpty(name))
+                                return (true, name);
+                        }
+                    }
+                }
+            }
+            catch { }
+            return (false, "");
         }
 
         private async Task<bool> ShowConfirmAsync(string title, string message)

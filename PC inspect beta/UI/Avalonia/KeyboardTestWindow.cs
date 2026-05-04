@@ -258,8 +258,8 @@ namespace PC_inspect_beta.UI.Avalonia
             var msgWindow = new Window
             {
                 Title = "Keyboard Result",
-                Width = 420,
-                Height = 180,
+                Width = 440,
+                Height = 260,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = new SolidColorBrush(Color.Parse("#16212e"))
@@ -269,30 +269,38 @@ namespace PC_inspect_beta.UI.Avalonia
                 ? "All keys detected — Keyboard PASSED ✔"
                 : $"{FailedKeys.Count} key(s) not detected:\n{string.Join(", ", FailedKeys)}";
 
-            var stack = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
-            stack.Children.Add(new TextBlock
-            {
-                Text = msg,
-                Foreground = FailedKeys.Count == 0
-                    ? new SolidColorBrush(Color.Parse("#10b981"))
-                    : new SolidColorBrush(Color.Parse("#f59e0b")),
-                FontSize = 14,
-                TextWrapping = TextWrapping.Wrap
-            });
+            var dock = new DockPanel { Margin = new Thickness(20) };
+
             var okBtn = new Button
             {
                 Content = "OK",
                 Background = new SolidColorBrush(Color.Parse("#2b72d4")),
                 Foreground = Brushes.White,
-                Width = 100,
-                Height = 36,
+                Width = 140,
+                Height = 42,
+                FontSize = 15,
+                FontWeight = FontWeight.SemiBold,
                 CornerRadius = new CornerRadius(6),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                HorizontalContentAlignment = HorizontalAlignment.Center
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 16, 0, 0)
             };
             okBtn.Click += (_, _) => { msgWindow.Close(); Close(); };
-            stack.Children.Add(okBtn);
-            msgWindow.Content = stack;
+            DockPanel.SetDock(okBtn, Dock.Bottom);
+            dock.Children.Add(okBtn);
+
+            dock.Children.Add(new TextBlock
+            {
+                Text = msg,
+                Foreground = FailedKeys.Count == 0
+                    ? new SolidColorBrush(Color.Parse("#10b981"))
+                    : new SolidColorBrush(Color.Parse("#f59e0b")),
+                FontSize = 15,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            msgWindow.Content = dock;
             msgWindow.ShowDialog(this);
         }
 
