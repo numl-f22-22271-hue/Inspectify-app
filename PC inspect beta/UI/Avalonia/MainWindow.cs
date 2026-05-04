@@ -304,7 +304,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 {
                     sb.AppendLine($"  Charge      : {bat.PercentRemaining}% {(bat.IsCharging ? "(charging)" : "(on battery)")}");
                     if (bat.DesignCapacityMwh > 0 && bat.HealthPercent > 0 && bat.HealthPercent <= 110)
-                        sb.AppendLine($"  Health      : {bat.HealthPercent}% ({bat.FullChargeCapacityMwh} / {bat.DesignCapacityMwh} mWh)");
+                        sb.AppendLine($"  Health      : {bat.HealthPercent}%");
                     result.Metadata["battery_percent"] = bat.PercentRemaining;
                     result.Metadata["battery_health"] = bat.HealthPercent;
                 }
