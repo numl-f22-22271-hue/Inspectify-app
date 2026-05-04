@@ -284,16 +284,32 @@ namespace PC_inspect_beta.Core.Platform
                     info.IsCharging = true;
             }
 
-            // Battery health from ioreg — values are in mAh, not mWh on macOS
-            // We still store them in DesignCapacityMwh/FullChargeCapacityMwh fields
-            // as the health % calculation is what matters
             var ioreg = Run("/usr/sbin/ioreg", "-l -w0 -r -c AppleSmartBattery");
+            int maxCap = 0, designCap = 0, rawMaxCap = 0;
             foreach (var line in ioreg.Split('\n'))
             {
                 if (line.Contains("\"DesignCapacity\" =") && !line.Contains("DesignCapacityLabel"))
-                    info.DesignCapacityMwh = ParseInt(line);
+                    designCap = ParseInt(line);
                 if (line.Contains("\"MaxCapacity\" =") && !line.Contains("MaxCapacityLabel"))
-                    info.FullChargeCapacityMwh = ParseInt(line);
+                    maxCap = ParseInt(line);
+                if (line.Contains("\"AppleRawMaxCapacity\" ="))
+                    rawMaxCap = ParseInt(line);
+            }
+
+            if (rawMaxCap > 0 && designCap > 0)
+            {
+                info.DesignCapacityMwh = designCap;
+                info.FullChargeCapacityMwh = rawMaxCap;
+            }
+            else if (maxCap > 0 && maxCap <= 100 && designCap > 1000)
+            {
+                info.DesignCapacityMwh = 100;
+                info.FullChargeCapacityMwh = maxCap;
+            }
+            else
+            {
+                info.DesignCapacityMwh = designCap;
+                info.FullChargeCapacityMwh = maxCap;
             }
             return info;
         }
