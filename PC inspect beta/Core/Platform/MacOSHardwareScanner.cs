@@ -296,15 +296,15 @@ namespace PC_inspect_beta.Core.Platform
                     rawMaxCap = ParseInt(line);
             }
 
-            if (rawMaxCap > 0 && designCap > 0)
-            {
-                info.DesignCapacityMwh = designCap;
-                info.FullChargeCapacityMwh = rawMaxCap;
-            }
-            else if (maxCap > 0 && maxCap <= 100 && designCap > 1000)
+            if (maxCap > 0 && maxCap <= 100 && designCap > 1000)
             {
                 info.DesignCapacityMwh = 100;
                 info.FullChargeCapacityMwh = maxCap;
+            }
+            else if (rawMaxCap > 0 && designCap > 0)
+            {
+                info.DesignCapacityMwh = designCap;
+                info.FullChargeCapacityMwh = rawMaxCap;
             }
             else
             {
