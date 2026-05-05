@@ -480,19 +480,32 @@ namespace PC_inspect_beta.UI.Avalonia
             var (detected, sensorName) = await Task.Run(DetectFingerprintSensor);
             if (!detected || _lastScan == null) return;
 
-            var confirmed = await ShowConfirmAsync("Fingerprint Sensor",
-                $"{sensorName} detected.\nPlease test it now — does it work?");
+            SetStatus($"Testing {sensorName} — place your finger on the sensor…", "#5ea0ff");
+
+            bool passed;
+            if (PlatformDetector.IsMacOS)
+            {
+                passed = await Task.Run(MacOSHardwareScanner.TestTouchId);
+            }
+            else
+            {
+                passed = await ShowConfirmAsync("Fingerprint Sensor",
+                    $"{sensorName} detected.\nPlace your finger on the sensor and try to unlock.\nDid it work?");
+            }
 
             var sb = new StringBuilder(_lastScan.ReportText);
             AppendSection(sb, "FINGERPRINT SENSOR");
             sb.AppendLine($"  Sensor      : {sensorName}");
-            sb.AppendLine(confirmed
-                ? "  Result      : ✔ PASSED — Fingerprint sensor working"
+            sb.AppendLine(passed
+                ? "  Result      : ✔ PASSED — Fingerprint sensor verified"
                 : "  Result      : ✖ FAILED — Fingerprint sensor not working");
             sb.AppendLine();
             _lastScan.ReportText = sb.ToString();
-            _lastScan.Metadata["fingerprint_status"] = confirmed ? "Passed" : "Failed";
+            _lastScan.Metadata["fingerprint_status"] = passed ? "Passed" : "Failed";
             _output.Text = _lastScan.ReportText;
+
+            SetStatus(passed ? "Fingerprint: PASSED ✔" : "Fingerprint: FAILED ✖",
+                passed ? "#10b981" : "#ef4444");
         }
 
         private static (bool Detected, string Name) DetectFingerprintSensor()
