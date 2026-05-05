@@ -496,6 +496,14 @@ namespace PC_inspect_beta.Core.Platform
 
         public static bool HasTouchId()
         {
+            var ioreg = Run("/usr/sbin/ioreg", "-r -d1 -c AppleBiometricSensor");
+            if (!string.IsNullOrWhiteSpace(ioreg) && ioreg.Contains("AppleBiometricSensor"))
+                return true;
+
+            var bioutil = Run("/usr/bin/bioutil", "-c -s");
+            if (!string.IsNullOrWhiteSpace(bioutil) && !bioutil.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
+                return true;
+
             var hw = Run("/usr/sbin/system_profiler", "SPHardwareDataType");
             return hw.Contains("Touch ID", StringComparison.OrdinalIgnoreCase);
         }
