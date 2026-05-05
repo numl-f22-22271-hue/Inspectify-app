@@ -75,6 +75,9 @@
 		<EmbeddedResource Include="Data\laptop_dataset.csv">
 			<LogicalName>PC_inspect_beta.Data.laptop_dataset.csv</LogicalName>
 		</EmbeddedResource>
+		<EmbeddedResource Include="PC-a-icon.ico">
+			<LogicalName>AppIcon</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 </Project>

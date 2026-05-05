@@ -38,7 +38,19 @@ namespace PC_inspect_beta.UI.Avalonia
             MinWidth  = 720;
             MinHeight = 520;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
+            LoadAppIcon();
             BuildUi();
+        }
+
+        private void LoadAppIcon()
+        {
+            try
+            {
+                var stream = typeof(MainWindow).Assembly.GetManifestResourceStream("AppIcon");
+                if (stream != null)
+                    Icon = new WindowIcon(stream);
+            }
+            catch { }
         }
 
         private void BuildUi()
