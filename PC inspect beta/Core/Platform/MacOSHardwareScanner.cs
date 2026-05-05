@@ -507,5 +507,39 @@ namespace PC_inspect_beta.Core.Platform
             var hw = Run("/usr/sbin/system_profiler", "SPHardwareDataType");
             return hw.Contains("Touch ID", StringComparison.OrdinalIgnoreCase);
         }
+
+        public static bool TestTouchId()
+        {
+            var scriptPath = Path.Combine(Path.GetTempPath(), "inspectify_touchid.swift");
+            try
+            {
+                File.WriteAllText(scriptPath,
+@"import LocalAuthentication
+import Foundation
+let context = LAContext()
+var error: NSError?
+guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+    print(""NO_BIOMETRIC"")
+    exit(1)
+}
+let sem = DispatchSemaphore(value: 0)
+var ok = false
+context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+    localizedReason: ""Inspectify: Place your finger to verify Touch ID"") { success, _ in
+    ok = success
+    sem.signal()
+}
+sem.wait()
+print(ok ? ""PASS"" : ""FAIL"")
+");
+                var output = Run("/usr/bin/swift", scriptPath, 60000);
+                return output.Contains("PASS");
+            }
+            catch { return false; }
+            finally
+            {
+                try { if (File.Exists(scriptPath)) File.Delete(scriptPath); } catch { }
+            }
+        }
     }
 }
