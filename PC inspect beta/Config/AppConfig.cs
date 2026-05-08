@@ -29,5 +29,12 @@ namespace PC_inspect_beta.Config
 
         /// <summary>Application version string.</summary>
         public const string Version = "2.0.0";
+
+        // ── SMTP (same Gmail App Password as the web project) ──
+        public const string SmtpHost = "smtp.gmail.com";
+        public const int SmtpPort = 587;
+        public const string SmtpUsername = "inspectifylapstore@gmail.com";
+        public const string SmtpPassword = "";
+        public const string SmtpFromName = "Inspectify LapStore";
     }
 }
