@@ -375,8 +375,24 @@ namespace PC_inspect_beta.UI.Avalonia
 
                 await DbHelper.SaveAdPost(_username, ad);
 
+                _pBar.Value = 95;
+
+                try
+                {
+                    var user = await DbHelper.GetUser(_username);
+                    var email = user?["email"]?.ToString();
+                    var displayName = user?["fullName"]?.ToString() ?? user?["full_name"]?.ToString() ?? _username;
+                    if (!string.IsNullOrWhiteSpace(email))
+                    {
+                        ShowStatus("Sending confirmation email...", false);
+                        await Task.Run(() => EmailHelper.SendListingConfirmationAsync(
+                            email, displayName, _txtTitle.Text!.Trim(), _txtPrice.Text!.Trim()));
+                    }
+                }
+                catch { }
+
                 _pBar.Value = 100;
-                ShowStatus($"Done -- {imageUrls.Count} photo(s) uploaded", false);
+                ShowStatus($"Done — {imageUrls.Count} photo(s) uploaded", false);
                 _statusText.Foreground = new SolidColorBrush(Color.Parse("#10b981"));
 
                 await Task.Delay(1200);
