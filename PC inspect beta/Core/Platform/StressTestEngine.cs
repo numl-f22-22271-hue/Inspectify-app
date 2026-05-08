@@ -231,6 +231,12 @@ namespace PC_inspect_beta.Core.Platform
                 finally
                 {
                     try { if (File.Exists(tmpFile)) File.Delete(tmpFile); } catch { }
+                    try
+                    {
+                        if (testDir.EndsWith("inspectify_test") && Directory.Exists(testDir)
+                            && !Directory.EnumerateFileSystemEntries(testDir).Any())
+                            Directory.Delete(testDir);
+                    } catch { }
                 }
                 results.Add(r);
             }
@@ -245,9 +251,33 @@ namespace PC_inspect_beta.Core.Platform
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                     System.Runtime.InteropServices.OSPlatform.Windows))
             {
+                var userTemp = Path.GetTempPath();
+                var usedDrives = new HashSet<string>();
+
+                var tempDriveLetter = Path.GetPathRoot(userTemp)?.TrimEnd('\\') ?? "";
+                if (!string.IsNullOrEmpty(tempDriveLetter))
+                {
+                    paths.Add((tempDriveLetter + "\\", userTemp));
+                    usedDrives.Add(tempDriveLetter);
+                }
+
                 foreach (var drive in DriveInfo.GetDrives()
                              .Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
-                    paths.Add((drive.Name, drive.RootDirectory.FullName));
+                {
+                    var letter = drive.Name.TrimEnd('\\');
+                    if (usedDrives.Contains(letter)) continue;
+
+                    var testDir = Path.Combine(drive.RootDirectory.FullName, "inspectify_test");
+                    try
+                    {
+                        Directory.CreateDirectory(testDir);
+                        paths.Add((drive.Name, testDir));
+                    }
+                    catch
+                    {
+                        // drive root not writable, skip
+                    }
+                }
             }
             else
             {

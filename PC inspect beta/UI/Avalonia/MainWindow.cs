@@ -24,6 +24,7 @@ namespace PC_inspect_beta.UI.Avalonia
         private Button _stopBtn = null!;
         private Button _postAdBtn = null!;
         private Button _exportPdfBtn = null!;
+        private Button _emailBtn = null!;
         private Button _kbTestBtn = null!;
         private Button _tpTestBtn = null!;
 
@@ -130,6 +131,11 @@ namespace PC_inspect_beta.UI.Avalonia
             _exportPdfBtn.Click += (_, _) => ExportPdf();
             actionStack.Children.Add(_exportPdfBtn);
 
+            _emailBtn = MakeBtn("Email Report", "#7c3aed");
+            _emailBtn.IsEnabled = false;
+            _emailBtn.Click += async (_, _) => await EmailReportAsync();
+            actionStack.Children.Add(_emailBtn);
+
             _postAdBtn = MakeBtn("Upload / Sell Device", "#10b981");
             _postAdBtn.IsEnabled = false;
             _postAdBtn.Click += async (_, _) => await SellDeviceAsync();
@@ -193,7 +199,8 @@ namespace PC_inspect_beta.UI.Avalonia
                     $"Welcome to {AppConfig.AppName}.\n\n" +
                     "1. Click 'Start System Scan' to inspect this device\n" +
                     "2. Click 'Save PDF Report' to export the scan\n" +
-                    "3. Click 'Upload / Sell Device' to list on the marketplace\n\n" +
+                    "3. Click 'Email Report' to send the report via email\n" +
+                    "4. Click 'Upload / Sell Device' to list on the marketplace\n\n" +
                     "Optional:\n" +
                     "  - Keyboard Test — verify all keys work\n" +
                     "  - Touchpad Test — verify touchpad coverage\n"
@@ -235,10 +242,21 @@ namespace PC_inspect_beta.UI.Avalonia
             }
         }
 
+        private async Task EmailReportAsync()
+        {
+            if (_lastScan == null) { SetStatus("Run a scan first.", "#f59e0b"); return; }
+
+            var emailWin = new EmailReportWindow(_lastScan.ReportText);
+            var sent = await emailWin.ShowDialog<bool>(this);
+            if (sent)
+                SetStatus("Inspection report emailed successfully ✔", "#10b981");
+        }
+
         private async Task RunScanAsync()
         {
             _scanBtn.IsEnabled = false;
             _exportPdfBtn.IsEnabled = false;
+            _emailBtn.IsEnabled = false;
             _postAdBtn.IsEnabled = false;
             _progress.IsVisible = true;
             SetStatus("Starting scan…", "#f59e0b");
@@ -408,6 +426,7 @@ namespace PC_inspect_beta.UI.Avalonia
 
                 SetStatus("Scan complete ✔", "#10b981");
                 _exportPdfBtn.IsEnabled = true;
+                _emailBtn.IsEnabled = true;
                 _postAdBtn.IsEnabled = true;
                 _output.Text = sb.ToString();
                 _scanBtn.IsEnabled = true;

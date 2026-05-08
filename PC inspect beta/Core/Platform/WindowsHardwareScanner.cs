@@ -17,10 +17,19 @@ namespace PC_inspect_beta.Core.Platform
         {
             var info = new OsInfo
             {
-                Name         = Environment.OSVersion.Platform.ToString(),
+                Name         = "Windows",
                 Version      = Environment.OSVersion.VersionString,
                 Architecture = Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit"
             };
+            try
+            {
+                using var mos = new ManagementObjectSearcher("SELECT Caption FROM Win32_OperatingSystem");
+                foreach (ManagementObject obj in mos.Get())
+                {
+                    info.Name = obj["Caption"]?.ToString()?.Trim() ?? "Windows";
+                    break;
+                }
+            } catch { }
             var up = TimeSpan.FromMilliseconds(Environment.TickCount64);
             info.Uptime = $"{(int)up.TotalDays}d {up.Hours:D2}:{up.Minutes:D2}:{up.Seconds:D2}";
             return info;
@@ -52,38 +61,155 @@ namespace PC_inspect_beta.Core.Platform
                 using var mos = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMemory");
                 foreach (ManagementObject obj in mos.Get())
                 {
+                    int memType = Convert.ToInt32(obj["SMBIOSMemoryType"] ?? 0);
                     var stick = new RamStick
                     {
                         CapacityMb   = Convert.ToInt64(obj["Capacity"] ?? 0) / 1024 / 1024,
-                        Manufacturer = obj["Manufacturer"]?.ToString() ?? "",
+                        Manufacturer = CleanManufacturer(obj["Manufacturer"]?.ToString() ?? ""),
                         SpeedMhz     = Convert.ToInt32(obj["Speed"] ?? 0),
-                        Type         = obj["MemoryType"]?.ToString() ?? ""
+                        Type         = MemoryTypeToString(memType)
                     };
                     info.Sticks.Add(stick);
                     info.TotalMb += stick.CapacityMb;
                 }
             } catch { }
+            try
+            {
+                using var os = new ManagementObjectSearcher("SELECT FreePhysicalMemory FROM Win32_OperatingSystem");
+                foreach (ManagementObject obj in os.Get())
+                {
+                    info.AvailableMb = Convert.ToInt64(obj["FreePhysicalMemory"] ?? 0) / 1024;
+                    break;
+                }
+            } catch { }
             return info;
+        }
+
+        private static string MemoryTypeToString(int smbiosType) => smbiosType switch
+        {
+            20 => "DDR",
+            21 => "DDR2",
+            22 => "DDR2",
+            24 => "DDR3",
+            26 => "DDR4",
+            30 => "LPDDR4",
+            34 => "DDR5",
+            35 => "LPDDR5",
+            _  => "DDR"
+        };
+
+        private static string CleanManufacturer(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            var trimmed = raw.Trim();
+            if (trimmed.All(c => char.IsLetterOrDigit(c)) && trimmed.Length > 10)
+            {
+                return trimmed.ToUpperInvariant() switch
+                {
+                    var s when s.StartsWith("80AD") => "SK Hynix",
+                    var s when s.StartsWith("80CE") => "Samsung",
+                    var s when s.StartsWith("802C") => "Micron",
+                    var s when s.StartsWith("8551") => "Qimonda",
+                    var s when s.StartsWith("014F") => "Transcend",
+                    var s when s.StartsWith("859B") => "Crucial",
+                    _ => trimmed
+                };
+            }
+            return trimmed;
         }
 
         public List<StorageInfo> GetStorageInfo()
         {
             var list = new List<StorageInfo>();
+
+            var diskTypes = new Dictionary<int, string>();
+            try
+            {
+                using var pd = new ManagementObjectSearcher("root\\Microsoft\\Windows\\Storage",
+                    "SELECT DeviceId, MediaType FROM MSFT_PhysicalDisk");
+                foreach (ManagementObject obj in pd.Get())
+                {
+                    int id = Convert.ToInt32(obj["DeviceId"] ?? -1);
+                    int mt = Convert.ToInt32(obj["MediaType"] ?? 0);
+                    diskTypes[id] = mt == 4 ? "SSD" : mt == 3 ? "HDD" : "Unknown";
+                }
+            } catch { }
+
+            var driveFreeSpace = new Dictionary<string, long>();
+            try
+            {
+                foreach (var d in System.IO.DriveInfo.GetDrives()
+                             .Where(d => d.IsReady && d.DriveType == System.IO.DriveType.Fixed))
+                    driveFreeSpace[d.Name.TrimEnd('\\')] = d.AvailableFreeSpace / 1024 / 1024 / 1024;
+            } catch { }
+
             try
             {
                 using var mos = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive");
                 foreach (ManagementObject obj in mos.Get())
                 {
+                    string model = obj["Model"]?.ToString() ?? "";
+                    string deviceId = obj["DeviceID"]?.ToString() ?? "";
+                    int diskIndex = Convert.ToInt32(obj["Index"] ?? -1);
+
+                    string type = "HDD";
+                    if (diskTypes.TryGetValue(diskIndex, out var detected))
+                        type = detected;
+                    else if (InferSsdFromModel(model))
+                        type = "SSD";
+
+                    string mount = GetDriveLetters(deviceId);
+                    long freeGb = 0;
+                    foreach (var letter in mount.Split(',', StringSplitOptions.TrimEntries))
+                    {
+                        var key = letter.TrimEnd('\\');
+                        if (driveFreeSpace.TryGetValue(key, out var free))
+                            freeGb += free;
+                    }
+
                     list.Add(new StorageInfo
                     {
-                        Model      = obj["Model"]?.ToString() ?? "",
-                        Type       = (obj["MediaType"]?.ToString() ?? "").Contains("SSD") ? "SSD" : "HDD",
+                        Model      = model,
+                        Type       = type,
                         CapacityGb = Convert.ToInt64(obj["Size"] ?? 0) / 1024 / 1024 / 1024,
-                        Mount      = obj["DeviceID"]?.ToString() ?? ""
+                        FreeGb     = freeGb,
+                        Mount      = string.IsNullOrEmpty(mount) ? deviceId : mount
                     });
                 }
             } catch { }
             return list;
+        }
+
+        private static bool InferSsdFromModel(string model)
+        {
+            var m = model.ToUpperInvariant();
+            return m.Contains("SSD") || m.Contains("NVME") || m.Contains("KINGSTON")
+                || m.Contains("SAMSUNG EVO") || m.Contains("SAMSUNG PRO")
+                || m.Contains("WD BLUE SN") || m.Contains("WD BLACK SN")
+                || m.Contains("CRUCIAL") || m.Contains("SANDISK");
+        }
+
+        private static string GetDriveLetters(string deviceId)
+        {
+            try
+            {
+                var letters = new List<string>();
+                using var dp = new ManagementObjectSearcher(
+                    $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='{deviceId}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
+                foreach (ManagementObject partition in dp.Get())
+                {
+                    using var ld = new ManagementObjectSearcher(
+                        $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partition["DeviceID"]}'}} WHERE AssocClass=Win32_LogicalDiskToPartition");
+                    foreach (ManagementObject logical in ld.Get())
+                    {
+                        var letter = logical["DeviceID"]?.ToString();
+                        if (!string.IsNullOrEmpty(letter))
+                            letters.Add(letter + "\\");
+                    }
+                }
+                return string.Join(", ", letters);
+            }
+            catch { return ""; }
         }
 
         public List<GpuInfo> GetGpuInfo()
