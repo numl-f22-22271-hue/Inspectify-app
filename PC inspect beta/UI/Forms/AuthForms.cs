@@ -209,7 +209,7 @@ namespace PC_inspect_beta.UI.Forms
             this.Controls.Add(hint);
             y += 40;
 
-            AuthChrome.AddField(this, "Username", ref _txtUser, ref y);
+            AuthChrome.AddField(this, "Username or Email", ref _txtUser, ref y);
             AuthChrome.AddField(this, "Password", ref _txtPass, ref y, isPassword: true);
 
             int btnW = this.ClientSize.Width - AuthChrome.FormPad * 2;
@@ -220,15 +220,21 @@ namespace PC_inspect_beta.UI.Forms
                 btnLogin.Text = "Verifying…"; btnLogin.Enabled = false;
                 try
                 {
-                    var user = await DbHelper.GetUser(_txtUser.Text.Trim());
+                    var input = _txtUser.Text.Trim();
+                    var user = await DbHelper.GetUser(input);
+                    if (user == null && input.Contains('@'))
+                        user = await DbHelper.GetUserByEmail(input);
+
                     if (user != null && user["password"]?.ToString() == _txtPass.Text)
                     {
-                        AuthenticatedUsername = _txtUser.Text.Trim();
+                        AuthenticatedUsername = user["username"]?.ToString()
+                            ?? user["_id"]?.ToString()
+                            ?? input;
                         DialogResult          = DialogResult.OK;
                     }
                     else
                     {
-                        MessageBox.Show("Invalid username or password.", "Login Failed",
+                        MessageBox.Show("Invalid username/email or password.", "Login Failed",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         btnLogin.Text = "Log In"; btnLogin.Enabled = true;
                     }

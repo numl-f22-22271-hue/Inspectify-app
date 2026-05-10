@@ -27,7 +27,7 @@ namespace PC_inspect_beta.UI.Avalonia
         private TextBox _txtTitle = null!, _txtPrice = null!, _txtDesc = null!;
         private NumericUpDown _numYearsUsed = null!;
         private ComboBox _cmbCondition = null!;
-        private TextBlock _lblFileCount = null!, _statusText = null!;
+        private TextBlock _lblFileCount = null!, _statusText = null!, _lblPrediction = null!;
         private ProgressBar _pBar = null!;
         private Button _btnPost = null!, _btnPhoto = null!;
 
@@ -157,6 +157,18 @@ namespace PC_inspect_beta.UI.Avalonia
             form.Children.Add(MakeLabel("Price (PKR)"));
             _txtPrice = MakeInput();
             form.Children.Add(_txtPrice);
+
+            // Price prediction hint
+            _lblPrediction = new TextBlock
+            {
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.Parse("#94a3b8")),
+                IsVisible = false,
+                Margin = new Thickness(0, -4, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            };
+            form.Children.Add(_lblPrediction);
+            ShowPricePrediction();
 
             // Condition + Years Used side by side
             var condRow = new Grid
@@ -479,6 +491,28 @@ namespace PC_inspect_beta.UI.Avalonia
             if (meta.TryGetValue("gpu_name", out var gpu))
                 parts.Add(gpu.ToString() ?? "");
             return string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p)));
+        }
+
+        private void ShowPricePrediction()
+        {
+            try
+            {
+                float predicted = 0;
+#if HAS_ML
+                predicted = PricePredictor.Predict(_scan?.Metadata, "Used");
+#else
+                predicted = (float)PriceEstimator.Estimate(_scan?.Metadata, "Used");
+#endif
+                if (predicted > 0)
+                {
+                    long min = (long)Math.Round(predicted * 0.90f);
+                    long max = (long)Math.Round(predicted * 1.10f);
+                    _lblPrediction.Text = $"⚡ Suggested price: PKR {min:N0} – {max:N0}";
+                    _lblPrediction.Foreground = new SolidColorBrush(Color.Parse("#5ea0ff"));
+                    _lblPrediction.IsVisible = true;
+                }
+            }
+            catch { }
         }
 
         private static TextBlock MakeLabel(string text, bool accent = false) => new()

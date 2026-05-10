@@ -82,8 +82,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 HorizontalAlignment = HorizontalAlignment.Center
             });
 
-            // Username
-            form.Children.Add(MakeLabel("Username"));
+            // Username or Email
+            form.Children.Add(MakeLabel("Username or Email"));
             _txtUser = MakeInput();
             form.Children.Add(_txtUser);
 
@@ -165,15 +165,21 @@ namespace PC_inspect_beta.UI.Avalonia
 
             try
             {
-                var user = await DbHelper.GetUser(_txtUser.Text?.Trim() ?? "");
+                var input = _txtUser.Text?.Trim() ?? "";
+                var user = await DbHelper.GetUser(input);
+                if (user == null && input.Contains('@'))
+                    user = await DbHelper.GetUserByEmail(input);
+
                 if (user != null && user["password"]?.ToString() == _txtPass.Text)
                 {
-                    AuthenticatedUsername = _txtUser.Text?.Trim();
+                    AuthenticatedUsername = user["username"]?.ToString()
+                        ?? user["_id"]?.ToString()
+                        ?? input;
                     Close(true);
                 }
                 else
                 {
-                    ShowError("Invalid username or password.");
+                    ShowError("Invalid username/email or password.");
                 }
             }
             catch (Exception ex)
