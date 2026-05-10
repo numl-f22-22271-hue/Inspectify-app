@@ -39,11 +39,18 @@ namespace PC_inspect_beta.UI.Avalonia
             _scan = scan;
             Title = "Create Marketplace Listing";
             Width = 560;
-            Height = 860;
-            CanResize = false;
+            MinWidth = 420;
+            MinHeight = 480;
+            CanResize = true;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.Parse("#16212e"));
             BuildUi();
+            Opened += (_, _) =>
+            {
+                var screen = Screens.ScreenFromWindow(this);
+                double available = (screen?.WorkingArea.Height ?? 800) / (screen?.Scaling ?? 1.0);
+                Height = Math.Min(750, available - 40);
+            };
         }
 
         private void BuildUi()
@@ -63,8 +70,8 @@ namespace PC_inspect_beta.UI.Avalonia
                         new GradientStop(Color.Parse("#5ea0ff"), 1)
                     }
                 },
-                Height = 110,
-                Padding = new Thickness(20, 20)
+                Height = 80,
+                Padding = new Thickness(20, 14)
             };
             DockPanel.SetDock(header, Dock.Top);
 
@@ -76,7 +83,7 @@ namespace PC_inspect_beta.UI.Avalonia
             hs.Children.Add(new TextBlock
             {
                 Text = "Sell Your Device",
-                FontSize = 20,
+                FontSize = 18,
                 FontWeight = FontWeight.Bold,
                 Foreground = Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Center
@@ -92,8 +99,7 @@ namespace PC_inspect_beta.UI.Avalonia
             header.Child = hs;
             root.Children.Add(header);
 
-            // Bottom: submit button + progress + status
-            var bottomPanel = new StackPanel { Margin = new Thickness(20, 8, 20, 12) };
+            var bottomPanel = new StackPanel { Margin = new Thickness(20, 6, 20, 10) };
             DockPanel.SetDock(bottomPanel, Dock.Bottom);
 
             _statusText = new TextBlock
@@ -123,7 +129,7 @@ namespace PC_inspect_beta.UI.Avalonia
                 Foreground = Brushes.White,
                 FontWeight = FontWeight.SemiBold,
                 FontSize = 14,
-                Height = 52,
+                Height = 46,
                 CornerRadius = new CornerRadius(8),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Center
@@ -134,8 +140,8 @@ namespace PC_inspect_beta.UI.Avalonia
             root.Children.Add(bottomPanel);
 
             // Scrollable form
-            var scroll = new ScrollViewer { Padding = new Thickness(20, 16) };
-            var form = new StackPanel { Spacing = 10 };
+            var scroll = new ScrollViewer { Padding = new Thickness(20, 12) };
+            var form = new StackPanel { Spacing = 8 };
 
             // Title (auto-filled)
             form.Children.Add(MakeLabel("Product Title"));
@@ -218,7 +224,7 @@ namespace PC_inspect_beta.UI.Avalonia
                     Text = specs,
                     IsReadOnly = true,
                     AcceptsReturn = true,
-                    Height = 80,
+                    Height = 64,
                     Background = new SolidColorBrush(Color.Parse("#0d1620")),
                     Foreground = new SolidColorBrush(Color.Parse("#e2e8f0")),
                     BorderBrush = new SolidColorBrush(Color.Parse("#243447")),
@@ -492,7 +498,7 @@ namespace PC_inspect_beta.UI.Avalonia
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10),
             FontSize = 14,
-            Height = multiline ? 100 : 44,
+            Height = multiline ? 76 : 44,
             AcceptsReturn = multiline,
             TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap
         };

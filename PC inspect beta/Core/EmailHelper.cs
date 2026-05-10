@@ -1,9 +1,7 @@
 using System;
 using System.Net;
+using System.Net.Mail;
 using System.Threading.Tasks;
-using MailKit.Net.Smtp;
-using MailKit.Security;
-using MimeKit;
 using PC_inspect_beta.Config;
 
 namespace PC_inspect_beta.Core
@@ -15,19 +13,17 @@ namespace PC_inspect_beta.Core
             if (string.IsNullOrWhiteSpace(AppConfig.SmtpPassword))
                 throw new InvalidOperationException("SMTP password not configured.");
 
-            var msg = new MimeMessage();
-            msg.From.Add(new MailboxAddress(AppConfig.SmtpFromName, AppConfig.SmtpUsername));
-            msg.To.Add(new MailboxAddress(toName ?? toEmail, toEmail));
+            using var msg = new MailMessage();
+            msg.From = new MailAddress(AppConfig.SmtpUsername, AppConfig.SmtpFromName);
+            msg.To.Add(new MailAddress(toEmail, toName ?? toEmail));
             msg.Subject = subject;
+            msg.Body = htmlBody;
+            msg.IsBodyHtml = true;
 
-            var builder = new BodyBuilder { HtmlBody = htmlBody, TextBody = plainBody };
-            msg.Body = builder.ToMessageBody();
-
-            using var smtp = new SmtpClient();
-            await smtp.ConnectAsync(AppConfig.SmtpHost, AppConfig.SmtpPort, SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync(AppConfig.SmtpUsername, AppConfig.SmtpPassword);
-            await smtp.SendAsync(msg);
-            await smtp.DisconnectAsync(quit: true);
+            using var smtp = new SmtpClient(AppConfig.SmtpHost, AppConfig.SmtpPort);
+            smtp.Credentials = new NetworkCredential(AppConfig.SmtpUsername, AppConfig.SmtpPassword);
+            smtp.EnableSsl = true;
+            await smtp.SendMailAsync(msg);
         }
 
         public static async Task SendVerificationCodeAsync(string toEmail, string displayName, string code)

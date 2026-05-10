@@ -10,7 +10,7 @@ namespace PC_inspect_beta.Config
     {
         /// <summary>MongoDB Atlas connection string.</summary>
         public const string MongoConnectionString =
-            "mongodb+srv://mbilalnasir:qwertyna007@inspectifycluster.n3r5mt6.mongodb.net/?appName=InspectifyCluster";
+            "mongodb+srv://mbilalnasir:ePnjLUxwJJNo13ZN@inspectifycluster.n3r5mt6.mongodb.net/?appName=InspectifyCluster";
 
         /// <summary>Database name inside the cluster.</summary>
         public const string DatabaseName = "inspectify";
@@ -34,7 +34,7 @@ namespace PC_inspect_beta.Config
         public const string SmtpHost = "smtp.gmail.com";
         public const int SmtpPort = 587;
         public const string SmtpUsername = "inspectifylapstore@gmail.com";
-        public const string SmtpPassword = "";
+        public const string SmtpPassword = "cvmo rozv fftj pelz";
         public const string SmtpFromName = "Inspectify LapStore";
     }
 }

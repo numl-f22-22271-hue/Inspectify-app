@@ -45,6 +45,14 @@ namespace PC_inspect_beta.Core
             return doc == null ? null : BsonToJObject(doc);
         }
 
+        /// <summary>Finds a user by email address, or null if not found.</summary>
+        public static async Task<JObject> GetUserByEmail(string email)
+        {
+            var filter = Builders<BsonDocument>.Filter.Eq("email", email);
+            var doc = await _users.Find(filter).FirstOrDefaultAsync();
+            return doc == null ? null : BsonToJObject(doc);
+        }
+
         /// <summary>Creates or overwrites a user record in MongoDB (keyed by username).</summary>
         public static async Task SaveUser(string username, object data)
         {
