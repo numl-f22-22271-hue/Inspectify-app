@@ -34,7 +34,7 @@ namespace PC_inspect_beta.Config
         public const string SmtpHost = "smtp.gmail.com";
         public const int SmtpPort = 587;
         public const string SmtpUsername = "inspectifylapstore@gmail.com";
-        public const string SmtpPassword = "";
+        public const string SmtpPassword = "htqg vhaj lcnx rzsi";
         public const string SmtpFromName = "Inspectify LapStore";
     }
 }

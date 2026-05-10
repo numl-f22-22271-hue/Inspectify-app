@@ -135,6 +135,9 @@ namespace PC_inspect_beta.UI.Avalonia
             try
             {
                 var user = await DbHelper.GetUser(identifier);
+                if (user == null && identifier.Contains("@"))
+                    user = await DbHelper.GetUserByEmail(identifier);
+
                 if (user == null)
                 {
                     ShowError("Account not found. Check your username or email.");
@@ -142,8 +145,8 @@ namespace PC_inspect_beta.UI.Avalonia
                 }
 
                 _userEmail = user["email"]?.ToString() ?? "";
-                _userName = identifier;
-                _displayName = user["fullName"]?.ToString() ?? user["full_name"]?.ToString() ?? identifier;
+                _userName = user["_id"]?.ToString() ?? identifier;
+                _displayName = user["fullName"]?.ToString() ?? user["full_name"]?.ToString() ?? _userName;
 
                 if (string.IsNullOrWhiteSpace(_userEmail))
                 {
@@ -164,7 +167,7 @@ namespace PC_inspect_beta.UI.Avalonia
             }
             catch (Exception ex)
             {
-                ShowError($"Failed to send email: {ex.Message}");
+                ShowError($"Error: {ex.Message}");
             }
             finally
             {
